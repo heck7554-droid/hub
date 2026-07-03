@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   me: null, members: [], restrictions: null, thread: null, tab: 'today',
   selectedDay: startOfDay(new Date()),
+  view: localStorage.getItem('hub_view') === 'week' ? 'week' : 'day',
   weekEvents: [], weekKey: null,
   defaultCalendarId: null, pickedMembers: new Set(),
 };
@@ -265,10 +266,12 @@ const DAY_MS = 86400_000;
 const PX_PER_MIN = 1; // 60px per hour
 
 async function loadWeekEvents() {
-  // fetch a 15-day window covering the strip; cache per window
-  const from = startOfDay(new Date());
-  const to = new Date(from.getTime() + 15 * DAY_MS);
-  const key = from.toISOString().slice(0, 10);
+  // window covers the full current week (may start before today) plus the
+  // 14-day strip; cached per calendar day
+  const today = startOfDay(new Date());
+  const from = new Date(today.getTime() - 7 * DAY_MS);
+  const to = new Date(today.getTime() + 21 * DAY_MS);
+  const key = today.toISOString().slice(0, 10);
   if (state.weekKey === key && state.weekEvents.length) return;
   const { events } = await apiFetch(
     `/events?from=${from.toISOString()}&to=${to.toISOString()}`);
@@ -280,7 +283,65 @@ async function renderDayView(force = false) {
   if (force) state.weekKey = null;
   await loadWeekEvents();
   renderDayStrip();
-  renderDayGrid();
+  $('viewSeg').querySelectorAll('button').forEach((b) =>
+    b.classList.toggle('on', b.dataset.v === state.view));
+  const week = state.view === 'week';
+  $('allDayRow').classList.toggle('hidden', week);
+  $('gridWrap').classList.toggle('hidden', week);
+  $('weekGrid').classList.toggle('hidden', !week);
+  if (week) renderWeekGrid(); else renderDayGrid();
+}
+
+$('viewSeg').querySelectorAll('button').forEach((b) =>
+  b.addEventListener('click', () => {
+    state.view = b.dataset.v;
+    localStorage.setItem('hub_view', state.view);
+    renderDayView();
+  }));
+
+/** Week view: 7 columns from the selected day's week (Sunday start). */
+function renderWeekGrid() {
+  const sel = state.selectedDay;
+  const weekStart = new Date(sel.getTime() - sel.getDay() * DAY_MS);
+  const today = startOfDay(new Date()).getTime();
+  const colorOf = Object.fromEntries(state.members.map((m) => [m.id, m.color]));
+  const days = [...Array(7)].map((_, i) => new Date(weekStart.getTime() + i * DAY_MS));
+
+  state.weekCells = days.map((day) => {
+    const evs = eventsOn(day)
+      .sort((a, b) => (b.isAllDay - a.isAllDay) || a.startsAt.localeCompare(b.startsAt));
+    return { day, evs };
+  });
+
+  $('dayTitle').textContent = `Week of ${weekStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`;
+  $('weekGrid').innerHTML = state.weekCells.map(({ day, evs }, di) => `
+    <div class="wkDay ${day.getTime() === today ? 'today' : ''}">
+      <h5 data-day="${day.getTime()}">${day.toLocaleDateString(undefined, { weekday: 'short' })}<b>${day.getDate()}</b></h5>
+      ${evs.map((e, ei) => `
+        <div class="wkEv" data-cell="${di}:${ei}" style="--c:${e.color ?? 'var(--accent)'}">
+          <div class="t">${e.isAllDay ? 'all day' : fmtTime(e.startsAt)}</div>
+          <div class="n">${esc(e.title)}</div>
+          ${(e.memberIds ?? []).length ? `<div class="dots">${e.memberIds.map((id) =>
+            `<i style="background:${colorOf[id] ?? '#666'}"></i>`).join('')}</div>` : ''}
+        </div>`).join('')}
+    </div>`).join('');
+
+  // tap a date → jump into that day; tap an event → details
+  $('weekGrid').querySelectorAll('h5[data-day]').forEach((h) =>
+    h.addEventListener('click', () => {
+      state.selectedDay = new Date(+h.dataset.day);
+      state.view = 'day';
+      localStorage.setItem('hub_view', 'day');
+      renderDayView();
+    }));
+  $('weekGrid').querySelectorAll('[data-cell]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const [di, ei] = el.dataset.cell.split(':').map(Number);
+      openEventDetail(state.weekCells[di].evs[ei]);
+    }));
+
+  // scroll today's column into view on phones
+  $('weekGrid').querySelector('.wkDay.today')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
 function renderDayStrip() {
@@ -392,8 +453,9 @@ function openEventDetail(e) {
   sheet.querySelector('.sheet').style.setProperty('--c', e.color ?? 'var(--accent)');
   $('dTitle').textContent = e.title;
 
-  const dayLabel = state.selectedDay.toLocaleDateString(undefined,
-    { weekday: 'long', month: 'long', day: 'numeric' });
+  // the event's own date (works from both day and week views)
+  const dayLabel = new Date(e._s ?? e.occurrenceStart ?? e.startsAt).toLocaleDateString(
+    undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   $('dWhen').innerHTML = e.isAllDay
     ? `All day<small>${esc(dayLabel)}</small>`
     : `${fmtTime(e._s ?? e.startsAt)} – ${fmtTime(e._e ?? e.endsAt)}<small>${esc(dayLabel)}</small>`;

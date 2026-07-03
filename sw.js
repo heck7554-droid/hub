@@ -1,7 +1,7 @@
 /* Family Hub service worker: offline shell + Web Push. */
 'use strict';
 
-const CACHE = 'hub-v3'; // bump on every deploy to invalidate old files
+const CACHE = 'hub-v4'; // bump on every deploy to invalidate old files
 const SHELL = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
