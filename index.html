@@ -122,6 +122,20 @@
   .taskGroup h4 { display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--dim); }
   .taskGroup h4 i { width:10px; height:10px; border-radius:50%; display:inline-block; }
   .allDone { color:var(--dim); font-size:.85rem; padding:8px 2px; }
+  .valueBadge { background:rgba(212,175,55,.16); color:var(--accent); border:1px solid rgba(212,175,55,.35);
+    border-radius:10px; padding:1px 8px; font-size:.75rem; font-weight:700; margin-left:8px; white-space:nowrap; }
+
+  /* ── earnings ──────────────────────────────────────────────── */
+  #earnStrip { display:flex; gap:8px; overflow-x:auto; padding:2px 14px 8px; scrollbar-width:none; }
+  #earnStrip:empty { display:none; }
+  #earnStrip .earnChip { display:inline-flex; align-items:center; gap:7px; background:var(--panel);
+    border:1px solid var(--line); border-radius:16px; padding:6px 13px; font-size:.85rem; white-space:nowrap; }
+  #earnStrip .earnChip i { width:9px; height:9px; border-radius:50%; }
+  #earnStrip .earnChip b { color:var(--accent); font-variant-numeric:tabular-nums; }
+  .histRow { display:flex; gap:8px; font-size:.8rem; padding:5px 2px; border-bottom:1px solid var(--line); color:var(--dim); }
+  .histRow:last-child { border-bottom:none; }
+  .histRow .amt { min-width:56px; font-variant-numeric:tabular-nums; font-weight:700; }
+  .histRow .amt.plus { color:#69c47a; } .histRow .amt.minus { color:var(--red); }
 
   #allDayRow { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 8px; }
   #allDayRow .chip { background:var(--panel2); border-left:3px solid var(--c,var(--accent));
@@ -262,6 +276,7 @@
     </div>
     <main>
       <section id="view-today" style="padding:0">
+        <div id="earnStrip"></div>
         <div id="dayStrip"></div>
         <div id="dayHead">
           <div id="viewSeg">
@@ -288,7 +303,10 @@
           <form id="addTaskForm" class="hidden">
             <div class="row">
               <input id="tTitle" placeholder="New task…" required autocomplete="off">
-              <select id="tMember" style="max-width:42%"></select>
+              <select id="tMember" style="max-width:38%"></select>
+            </div>
+            <div class="row">
+              <input id="tValue" type="number" min="0" step="0.25" inputmode="decimal" placeholder="Worth $ (optional)">
             </div>
             <button type="submit" class="gold">Assign task</button>
           </form>
@@ -338,6 +356,20 @@
             • <b>iPhone/iCloud</b>: Calendar app → Calendars → tap <b>ⓘ</b> next to a calendar → turn on <i>Public Calendar</i> → Share Link.<br>
             • <b>School / sports sites</b>: look for a “Subscribe”, “iCal”, or “Add to calendar” link.<br>
             Events refresh automatically every few minutes (view-only).</div>
+        </div>
+        <div class="card"><h3>💰 Allowance &amp; earnings</h3>
+          <div id="earnBalances"></div>
+          <form id="adjustForm">
+            <div class="row">
+              <select id="ajMember" style="max-width:38%"></select>
+              <input id="ajAmount" type="number" min="0.01" step="0.25" inputmode="decimal" placeholder="$ used" required>
+            </div>
+            <input id="ajNote" placeholder="What was it spent on? (optional)">
+            <button type="submit" class="gold">Deduct from balance</button>
+          </form>
+          <div id="earnHistory"></div>
+          <div class="note">Tasks with a $ value credit the child automatically when checked off.
+            Deduct here as they spend it.</div>
         </div>
         <div class="card"><h3>Home displays (TV / iPad)</h3>
           <div id="deviceList"></div>

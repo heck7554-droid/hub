@@ -97,6 +97,7 @@ async function boot() {
     buildTabs();
     switchTab('today');
     updateNotifBar();
+    loadEarnings();
     pollSos();
     setInterval(pollSos, 20_000);
     syncWakeLock(); // big screens: hold the display awake from sign-in
@@ -332,6 +333,65 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // ----------------------------------------------------------------
+// Earnings (allowance): chips on the main screen, admin card
+// ----------------------------------------------------------------
+
+const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+
+async function loadEarnings() {
+  try {
+    const { balances, recent } = await apiFetch('/earnings');
+    state.balances = Object.fromEntries(balances.map((b) => [b.memberId, b.balanceCents]));
+    state.earnHistory = recent;
+    renderEarnStrip();
+    if (isParent()) renderEarnAdmin();
+  } catch { /* transient */ }
+}
+
+function renderEarnStrip() {
+  // kids always show; adults only if they have a balance
+  const show = state.members.filter((m) =>
+    m.role === 'child' || (state.balances?.[m.id] ?? 0) !== 0);
+  $('earnStrip').innerHTML = show.map((m) => `
+    <span class="earnChip"><i style="background:${m.color}"></i>${esc(m.displayName)}
+      <b>${money(state.balances?.[m.id] ?? 0)}</b></span>`).join('');
+}
+
+function renderEarnAdmin() {
+  const nameOf = Object.fromEntries(state.members.map((m) => [m.id, m.displayName]));
+  $('earnBalances').innerHTML = state.members
+    .filter((m) => m.role === 'child' || (state.balances?.[m.id] ?? 0) !== 0)
+    .map((m) => `<div class="memberRow"><i style="background:${m.color}"></i>${esc(m.displayName)}
+      <span class="role" style="color:var(--accent);font-weight:700">${money(state.balances?.[m.id] ?? 0)}</span></div>`)
+    .join('');
+  $('ajMember').innerHTML = state.members
+    .filter((m) => m.role === 'child' || (state.balances?.[m.id] ?? 0) !== 0)
+    .map((m) => `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  $('earnHistory').innerHTML = (state.earnHistory ?? []).map((e) => `
+    <div class="histRow">
+      <span class="amt ${e.amountCents >= 0 ? 'plus' : 'minus'}">${e.amountCents >= 0 ? '+' : '−'}${money(Math.abs(e.amountCents))}</span>
+      <span>${esc(nameOf[e.memberId] ?? '')} · ${esc(e.reason ?? '')}</span>
+    </div>`).join('');
+}
+
+$('adjustForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await apiFetch('/earnings/adjust', {
+      method: 'POST',
+      body: JSON.stringify({
+        memberId: $('ajMember').value,
+        amount: Number($('ajAmount').value),
+        note: $('ajNote').value.trim() || undefined,
+      }),
+    });
+    e.target.reset();
+    toast('Balance updated ✓');
+    loadEarnings();
+  } catch (err) { toast(err.message); }
+});
+
+// ----------------------------------------------------------------
 // Lists: grocery + per-member tasks
 // ----------------------------------------------------------------
 
@@ -363,14 +423,19 @@ async function loadLists() {
       ${list.map((t) => `
         <div class="checkRow">
           <button class="tick" data-t="${t.id}" aria-label="mark done"></button>
-          <div class="what">${esc(t.title)}</div>
+          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}</div>
         </div>`).join('') || '<div class="allDone">All done ✓</div>'}
     </div>`;
   }).join('');
   $('taskGroups').querySelectorAll('button[data-t]').forEach((b) =>
     b.addEventListener('click', async () => {
       b.closest('.checkRow').style.opacity = '0.35';
-      await apiFetch(`/tasks/${b.dataset.t}/complete`, { method: 'POST' });
+      const { task, earnedCents } = await apiFetch(`/tasks/${b.dataset.t}/complete`, { method: 'POST' });
+      if (earnedCents > 0) {
+        const who = state.members.find((m) => m.id === task.memberId);
+        toast(`${who?.id === state.me.id ? 'You' : who?.displayName ?? 'They'} earned ${money(earnedCents)} 🎉`);
+        loadEarnings();
+      }
       loadLists();
     }));
 
@@ -398,9 +463,13 @@ $('addTaskForm').addEventListener('submit', async (e) => {
   try {
     await apiFetch('/tasks', {
       method: 'POST',
-      body: JSON.stringify({ title, memberId: $('tMember').value }),
+      body: JSON.stringify({
+        title,
+        memberId: $('tMember').value,
+        value: Number($('tValue').value) || 0,
+      }),
     });
-    $('tTitle').value = '';
+    $('tTitle').value = ''; $('tValue').value = '';
     toast('Task assigned ✓');
     loadLists();
   } catch (err) { toast(err.message); }
@@ -829,6 +898,7 @@ async function pollSos() {
 async function loadAdmin() {
   loadCalendars();
   loadDevices();
+  loadEarnings();
   $('memberList').innerHTML = state.members.map((m) => {
     const login = m.email ? esc(m.email)
       : m.authUserId ? `signs in as “${esc(m.displayName.toLowerCase())}”` : 'no login';
