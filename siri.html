@@ -71,6 +71,30 @@
     </table>
   </div>
 
+  <h2>Auto-import iPhone Reminders → task list</h2>
+  <p class="dim">Anything you say to Siri the normal way ("remind me to sign Jack's permission slip")
+    can flow into the hub's task list automatically. One-time setup:</p>
+  <ol>
+    <li>In the <b>Reminders</b> app, create a list called <b>Family Hub</b>
+      <span class="dim">(optional but recommended — it keeps personal reminders private;
+      you can also make it your default list in Settings → Reminders)</span>.</li>
+    <li>New shortcut → add <b>Find Reminders</b> → filter: List is <b>Family Hub</b>,
+      Is Not Completed.</li>
+    <li>Add <b>Repeat with Each</b>. Inside the repeat:
+      <br>• <b>Get Contents of URL</b> — paste
+      <code>https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api/siri/task-add?title=</code>
+      and insert the <b>Repeat Item</b> variable right after <code>title=</code>;
+      set the same <code>Authorization</code> header as your other shortcuts.
+      <br>• <b>Complete Reminder</b> (Repeat Item) — moves it out of Reminders once it's in the hub.</li>
+    <li>Name it <b>Sync My Reminders</b> → Done.</li>
+    <li>Make it automatic: Shortcuts app → <b>Automation</b> tab → <b>+</b> →
+      <b>Time of Day</b> → e.g. 6:00 AM, Daily → <b>Run Immediately</b> (no confirmation) →
+      choose <b>Sync My Reminders</b>.</li>
+  </ol>
+  <p class="dim">The hub skips anything already on your list, so the automation can run as often
+    as you like — add a second automation at 6 PM if you want evening pickups too. You can also
+    just say <span class="say">"Hey Siri, sync my reminders"</span> anytime.</p>
+
   <h2>Notes</h2>
   <p class="dim">• Each person uses their own key — allowance answers are personal, and a parent can
     revoke any phone's key in Admin without touching the others.<br>
