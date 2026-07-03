@@ -620,16 +620,35 @@ async function loadAdmin() {
 
 async function loadCalendars() {
   const { calendars } = await apiFetch('/calendars');
+  const ownerOptions = (sel) => `<option value="">Family</option>` + state.members.map((m) =>
+    `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.displayName)}</option>`).join('');
   $('calList').innerHTML = calendars.map((cal) => `
     <div class="memberRow"><i style="background:${cal.color ?? '#666'}"></i>${esc(cal.name)}
-      <span class="role">${cal.provider === 'ics' ? 'link' : cal.provider}${cal.access === 'read_only' ? ' · view-only' : ''}
-      ${cal.provider === 'ics' ? `<button data-cal="${cal.id}" style="background:none;color:var(--red);padding:2px 6px">✕</button>` : ''}</span></div>`).join('');
+      <span class="role">
+      ${cal.provider === 'ics'
+        ? `<select data-owner="${cal.id}" style="padding:4px 6px;font-size:.78rem;width:auto">${ownerOptions(cal.ownerMemberId)}</select>
+           <button data-cal="${cal.id}" style="background:none;color:var(--red);padding:2px 6px">✕</button>`
+        : `${cal.provider}${cal.access === 'read_only' ? ' · view-only' : ''}`}</span></div>`).join('');
   $('calList').querySelectorAll('button[data-cal]').forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm('Remove this calendar and its events from the hub?')) return;
       await apiFetch(`/calendars/${b.dataset.cal}`, { method: 'DELETE' });
       loadCalendars();
     }));
+  // reassign owner: events re-shade in that person's color immediately
+  $('calList').querySelectorAll('select[data-owner]').forEach((sel) =>
+    sel.addEventListener('change', async () => {
+      await apiFetch(`/calendars/${sel.dataset.owner}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ownerMemberId: sel.value || null }),
+      });
+      state.weekKey = null; // recolor the day view on next visit
+      loadCalendars();
+      toast('Calendar owner updated ✓');
+    }));
+  // owner choices in the add form
+  $('acOwner').innerHTML = `<option value="">Whole family</option>` + state.members.map((m) =>
+    `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
 }
 
 $('addCalForm').addEventListener('submit', async (e) => {
@@ -642,7 +661,7 @@ $('addCalForm').addEventListener('submit', async (e) => {
       body: JSON.stringify({
         url: $('acUrl').value.trim(),
         name: $('acName').value.trim() || undefined,
-        color: $('acColor').value,
+        memberId: $('acOwner').value || undefined, // color follows the owner
       }),
     });
     e.target.reset();
