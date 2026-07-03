@@ -73,7 +73,32 @@
   .dayPill b { font-size:1.05rem; color:var(--text); }
   .dayPill.sel { background:var(--gold-grad); }
   .dayPill.sel small, .dayPill.sel b { color:var(--accent-dark); }
-  #dayTitle { font-weight:700; text-align:center; padding:2px 0 8px; font-size:.95rem; }
+  #dayHead { display:flex; align-items:center; justify-content:center; gap:10px; padding:2px 14px 8px; }
+  #dayTitle { font-weight:700; font-size:.95rem; }
+  #tvBtn { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
+    font-size:.75rem; padding:5px 10px; border-radius:16px; }
+
+  /* ── TV / big-screen mode ──────────────────────────────────── */
+  body.tv { zoom:1.7; }
+  body.tv nav, body.tv #notifBar, body.tv #addEventBtn, body.tv header #signout,
+  body.tv #tvBtn { display:none !important; }
+  body.tv main { padding-bottom:20px; }
+  #exitTv { position:fixed; top:10px; right:10px; z-index:60; background:var(--panel2);
+    color:var(--dim); border:1px solid var(--line); padding:6px 12px; font-size:.8rem; }
+
+  /* ── grocery & tasks ───────────────────────────────────────── */
+  .checkRow { display:flex; align-items:center; gap:12px; padding:10px 2px;
+    border-bottom:1px solid var(--line); }
+  .checkRow:last-child { border-bottom:none; }
+  .checkRow .tick { width:26px; height:26px; min-width:26px; border-radius:50%;
+    border:2px solid var(--accent); background:none; }
+  .checkRow .tick:active { background:var(--accent); }
+  .checkRow .what { flex:1; font-size:.95rem; }
+  .checkRow .byline { color:var(--dim); font-size:.72rem; }
+  .taskGroup { margin-top:12px; }
+  .taskGroup h4 { display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--dim); }
+  .taskGroup h4 i { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .allDone { color:var(--dim); font-size:.85rem; padding:8px 2px; }
 
   #allDayRow { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 8px; }
   #allDayRow .chip { background:var(--panel2); border-left:3px solid var(--c,var(--accent));
@@ -181,9 +206,32 @@
     <main>
       <section id="view-today" style="padding:0">
         <div id="dayStrip"></div>
-        <div id="dayTitle"></div>
+        <div id="dayHead">
+          <div id="dayTitle"></div>
+          <button id="tvBtn" title="Optimize for a TV or computer screen">📺 TV</button>
+        </div>
         <div id="allDayRow"></div>
         <div id="gridWrap"><div id="timeGrid"></div></div>
+      </section>
+      <section id="view-lists" class="hidden">
+        <div class="card"><h3>🛒 Grocery list</h3>
+          <form id="addGroceryForm" class="row">
+            <input id="gName" placeholder="Add an item…" required autocomplete="off">
+            <button type="submit" class="gold" style="padding:0 18px">Add</button>
+          </form>
+          <div id="groceryList"></div>
+          <div class="note">Anyone can add. Tap the circle when it's in the cart — it disappears for everyone.</div>
+        </div>
+        <div class="card"><h3>✅ Tasks</h3>
+          <form id="addTaskForm" class="hidden">
+            <div class="row">
+              <input id="tTitle" placeholder="New task…" required autocomplete="off">
+              <select id="tMember" style="max-width:42%"></select>
+            </div>
+            <button type="submit" class="gold">Assign task</button>
+          </form>
+          <div id="taskGroups"></div>
+        </div>
       </section>
       <section id="view-messages" class="hidden"><div id="msgList"></div></section>
       <section id="view-sos" class="hidden">
@@ -235,6 +283,7 @@
       </section>
     </main>
     <button id="addEventBtn" class="gold hidden">＋</button>
+    <button id="exitTv" class="hidden">Exit TV mode</button>
     <nav id="tabs"></nav>
   </div>
 

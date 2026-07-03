@@ -108,9 +108,10 @@ const canAddEvents = () =>
   state.me && (state.me.role !== 'child' || (state.restrictions?.canCreateEvents ?? true));
 
 function buildTabs() {
-  // SOS is on every profile — parents get Admin as a fourth tab
+  // SOS is on every profile — parents get Admin as a fifth tab
   const tabs = [
     { id: 'today', label: 'Today', icon: '📅' },
+    { id: 'lists', label: 'Lists', icon: '📝' },
     { id: 'messages', label: 'Messages', icon: '💬' },
     { id: 'sos', label: 'SOS', icon: '🆘' },
     ...(isParent() ? [{ id: 'admin', label: 'Admin', icon: '⚙️' }] : []),
@@ -126,7 +127,7 @@ function buildTabs() {
 
 function switchTab(tab) {
   state.tab = tab;
-  for (const view of ['today', 'messages', 'sos', 'admin']) {
+  for (const view of ['today', 'lists', 'messages', 'sos', 'admin']) {
     $(`view-${view}`).classList.toggle('hidden', view !== tab);
   }
   $('composer').classList.toggle('hidden', tab !== 'messages');
@@ -134,9 +135,119 @@ function switchTab(tab) {
   $('tabs').querySelectorAll('button').forEach((b) =>
     b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'today') renderDayView();
+  if (tab === 'lists') loadLists();
   if (tab === 'messages') loadMessages();
   if (tab === 'admin') loadAdmin();
 }
+
+// ----------------------------------------------------------------
+// TV / big-screen mode: fullscreen, larger type, auto-refresh
+// ----------------------------------------------------------------
+
+let tvTimer = null;
+let wakeLock = null;
+
+async function enterTv() {
+  document.body.classList.add('tv');
+  $('exitTv').classList.remove('hidden');
+  switchTab('today');
+  try { await document.documentElement.requestFullscreen?.(); } catch { /* iOS Safari: no API, zoom still applies */ }
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* optional */ }
+  tvTimer = setInterval(() => {
+    // follow the real day across midnight, then re-render fresh data
+    state.selectedDay = startOfDay(new Date());
+    renderDayView(true);
+  }, 5 * 60_000);
+}
+
+function exitTv() {
+  document.body.classList.remove('tv');
+  $('exitTv').classList.add('hidden');
+  clearInterval(tvTimer); tvTimer = null;
+  wakeLock?.release().catch(() => {}); wakeLock = null;
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+}
+
+$('tvBtn').addEventListener('click', enterTv);
+$('exitTv').addEventListener('click', exitTv);
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && document.body.classList.contains('tv')) exitTv();
+});
+
+// ----------------------------------------------------------------
+// Lists: grocery + per-member tasks
+// ----------------------------------------------------------------
+
+async function loadLists() {
+  const [{ items }, { tasks }] = await Promise.all([
+    apiFetch('/grocery'), apiFetch('/tasks'),
+  ]);
+
+  $('groceryList').innerHTML = items.map((it) => `
+    <div class="checkRow">
+      <button class="tick" data-g="${it.id}" aria-label="check off"></button>
+      <div class="what">${esc(it.name)}
+        <div class="byline">added by ${esc(it.addedByName ?? '')}</div></div>
+    </div>`).join('') || '<div class="allDone">List is empty 🎉</div>';
+  $('groceryList').querySelectorAll('button[data-g]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      b.closest('.checkRow').style.opacity = '0.35';
+      await apiFetch(`/grocery/${b.dataset.g}/check`, { method: 'POST' });
+      loadLists();
+    }));
+
+  // tasks grouped per family member — everyone sees every list
+  const byMember = new Map(state.members.map((m) => [m.id, []]));
+  for (const t of tasks) byMember.get(t.memberId)?.push(t);
+  $('taskGroups').innerHTML = state.members.map((m) => {
+    const list = byMember.get(m.id) ?? [];
+    return `<div class="taskGroup">
+      <h4><i style="background:${m.color}"></i>${esc(m.displayName)}${m.id === state.me.id ? ' (you)' : ''}</h4>
+      ${list.map((t) => `
+        <div class="checkRow">
+          <button class="tick" data-t="${t.id}" aria-label="mark done"></button>
+          <div class="what">${esc(t.title)}</div>
+        </div>`).join('') || '<div class="allDone">All done ✓</div>'}
+    </div>`;
+  }).join('');
+  $('taskGroups').querySelectorAll('button[data-t]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      b.closest('.checkRow').style.opacity = '0.35';
+      await apiFetch(`/tasks/${b.dataset.t}/complete`, { method: 'POST' });
+      loadLists();
+    }));
+
+  // only parents see the assign form
+  $('addTaskForm').classList.toggle('hidden', !isParent());
+  if (isParent()) {
+    $('tMember').innerHTML = state.members.map((m) =>
+      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  }
+}
+
+$('addGroceryForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('gName').value.trim();
+  if (!name) return;
+  $('gName').value = '';
+  await apiFetch('/grocery', { method: 'POST', body: JSON.stringify({ name }) });
+  loadLists();
+});
+
+$('addTaskForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = $('tTitle').value.trim();
+  if (!title) return;
+  try {
+    await apiFetch('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title, memberId: $('tMember').value }),
+    });
+    $('tTitle').value = '';
+    toast('Task assigned ✓');
+    loadLists();
+  } catch (err) { toast(err.message); }
+});
 
 function toast(text) {
   const el = $('toast');
