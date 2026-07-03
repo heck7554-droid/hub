@@ -317,10 +317,13 @@ function renderDayGrid() {
   const colorOf = Object.fromEntries(state.members.map((m) => [m.id, m.color]));
   const events = eventsOn(day);
 
-  // all-day chips (like the iOS bar at the top)
+  // all-day chips (like the iOS bar at the top) — tap to expand
   const allDay = events.filter((e) => e.isAllDay);
-  $('allDayRow').innerHTML = allDay.map((e) =>
-    `<span class="chip" style="--c:${e.color ?? 'var(--accent)'}">${esc(e.title)}</span>`).join('');
+  state.dayAllDay = allDay;
+  $('allDayRow').innerHTML = allDay.map((e, i) =>
+    `<span class="chip" data-ad="${i}" style="--c:${e.color ?? 'var(--accent)'}">${esc(e.title)}</span>`).join('');
+  $('allDayRow').querySelectorAll('[data-ad]').forEach((el) =>
+    el.addEventListener('click', () => openEventDetail(state.dayAllDay[+el.dataset.ad])));
 
   // timed events → clamp to the day, layout overlap columns
   const dayStart = day.getTime();
@@ -351,21 +354,93 @@ function renderDayGrid() {
   if (now >= gridTop && now <= gridTop + height * 60_000 / PX_PER_MIN) {
     html += `<div class="nowLine" style="top:${(now - gridTop) / 60_000 * PX_PER_MIN}px"></div>`;
   }
-  for (const e of timed) {
+  state.dayTimed = timed;
+  timed.forEach((e, i) => {
     const top = (e._s - gridTop) / 60_000 * PX_PER_MIN;
     const h = (e._e - e._s) / 60_000 * PX_PER_MIN;
     const width = 100 / e._cols;
     const left = e._col * width;
-    html += `<div class="gridEv" style="top:${top}px;height:${Math.max(h - 2, 22)}px;left:${left}%;width:calc(${width}% - 3px);--c:${e.color ?? 'var(--accent)'}">
+    html += `<div class="gridEv" data-ev="${i}" style="top:${top}px;height:${Math.max(h - 2, 22)}px;left:${left}%;width:calc(${width}% - 3px);--c:${e.color ?? 'var(--accent)'}">
       <div class="t">${fmtTime(e._s)}–${fmtTime(e._e)}</div>
       <div class="n">${esc(e.title)}</div>
       ${(e.memberIds ?? []).length ? `<div class="dots">${e.memberIds.map((id) =>
         `<i style="background:${colorOf[id] ?? '#666'}"></i>`).join('')}</div>` : ''}
     </div>`;
-  }
+  });
   $('timeGrid').style.height = `${height}px`;
   $('timeGrid').innerHTML = html;
+  $('timeGrid').querySelectorAll('[data-ev]').forEach((el) =>
+    el.addEventListener('click', () => openEventDetail(state.dayTimed[+el.dataset.ev])));
 }
+
+// ----------------------------------------------------------------
+// Event details sheet — tap any event to expand it
+// ----------------------------------------------------------------
+
+const REPEAT_LABELS = {
+  DAILY: 'Repeats every day', WEEKLY: 'Repeats every week',
+  MONTHLY: 'Repeats every month', YEARLY: 'Repeats every year',
+};
+const CAL_LABELS = {
+  local: 'Family calendar', ics: 'Subscribed calendar · view-only',
+  google: 'Google Calendar', outlook: 'Outlook', apple: 'iCloud',
+};
+
+function openEventDetail(e) {
+  state.detailEvent = e;
+  const sheet = $('detailModal');
+  sheet.querySelector('.sheet').style.setProperty('--c', e.color ?? 'var(--accent)');
+  $('dTitle').textContent = e.title;
+
+  const dayLabel = state.selectedDay.toLocaleDateString(undefined,
+    { weekday: 'long', month: 'long', day: 'numeric' });
+  $('dWhen').innerHTML = e.isAllDay
+    ? `All day<small>${esc(dayLabel)}</small>`
+    : `${fmtTime(e._s ?? e.startsAt)} – ${fmtTime(e._e ?? e.endsAt)}<small>${esc(dayLabel)}</small>`;
+
+  const freq = e.rrule?.match(/FREQ=(\w+)/)?.[1];
+  toggleRow('dRepeatRow', !!e.rrule);
+  if (e.rrule) $('dRepeat').textContent = REPEAT_LABELS[freq] ?? 'Repeating event';
+
+  toggleRow('dLocRow', !!e.location);
+  if (e.location) $('dLoc').textContent = e.location;
+  toggleRow('dDescRow', !!e.description);
+  if (e.description) $('dDesc').textContent = e.description;
+
+  $('dCal').textContent = CAL_LABELS[e.provider] ?? e.provider;
+
+  const members = (e.memberIds ?? [])
+    .map((id) => state.members.find((m) => m.id === id)).filter(Boolean);
+  toggleRow('dWhoRow', members.length > 0);
+  $('dMembers').innerHTML = members.map((m) =>
+    `<span><i style="background:${m.color}"></i>${esc(m.displayName)}</span>`).join('');
+
+  // delete: only family-calendar events (feeds are view-only); the server
+  // still enforces roles/ownership, so a blocked delete just toasts
+  const deletable = e.provider === 'local' && !e.isReadOnly && canAddEvents();
+  $('dDelete').classList.toggle('hidden', !deletable);
+  sheet.classList.remove('hidden');
+}
+
+function toggleRow(id, show) { $(id).classList.toggle('hidden', !show); }
+
+$('dClose').addEventListener('click', () => $('detailModal').classList.add('hidden'));
+$('detailModal').addEventListener('click', (e) => {
+  if (e.target === $('detailModal')) $('detailModal').classList.add('hidden');
+});
+$('dDelete').addEventListener('click', async () => {
+  const e = state.detailEvent;
+  const warning = e.rrule
+    ? 'This is a repeating event — deleting removes the whole series. Continue?'
+    : `Delete "${e.title}"?`;
+  if (!confirm(warning)) return;
+  try {
+    await apiFetch(`/events/${e.id}`, { method: 'DELETE' });
+    $('detailModal').classList.add('hidden');
+    toast('Event deleted ✓');
+    renderDayView(true);
+  } catch (err) { toast(err.message); }
+});
 
 /** Assign overlap columns (the iOS side-by-side layout): greedy interval packing. */
 function layoutColumns(events) {

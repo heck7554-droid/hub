@@ -125,15 +125,28 @@
     width:58px; height:58px; border-radius:50%; font-size:2rem; z-index:20;
     box-shadow:0 8px 24px rgba(212,175,55,.35); }
 
-  /* ── event composer sheet ──────────────────────────────────── */
-  #eventModal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:30;
+  /* ── bottom sheets (composer + event details) ──────────────── */
+  #eventModal, #detailModal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:30;
     display:grid; align-items:end; }
-  #eventModal .sheet { background:var(--panel); border-radius:20px 20px 0 0; padding:18px 16px
-    calc(18px + var(--safe-bottom)); display:flex; flex-direction:column; gap:10px;
+  #eventModal .sheet, #detailModal .sheet { background:var(--panel); border-radius:20px 20px 0 0;
+    padding:18px 16px calc(18px + var(--safe-bottom)); display:flex; flex-direction:column; gap:10px;
     max-height:88vh; overflow-y:auto; }
-  #eventModal h3 { font-size:1.05rem; color:var(--accent); }
+  #eventModal h3, #detailModal h3 { font-size:1.05rem; color:var(--accent); }
   #eventModal .row { display:flex; gap:8px; }
   #eventModal label { font-size:.75rem; color:var(--dim); display:block; margin:2px 0 4px; }
+  #detailModal h3 { font-size:1.2rem; color:var(--text); border-left:4px solid var(--c,var(--accent));
+    padding-left:10px; }
+  .dRow { display:flex; gap:10px; font-size:.92rem; line-height:1.4; }
+  .dRow .ic { width:22px; text-align:center; }
+  .dRow .v { flex:1; color:var(--text); white-space:pre-wrap; word-break:break-word; }
+  .dRow .v small { color:var(--dim); display:block; }
+  #dMembers { display:flex; flex-wrap:wrap; gap:6px; }
+  #dMembers span { display:inline-flex; align-items:center; gap:6px; background:var(--panel2);
+    border:1px solid var(--line); padding:5px 11px; border-radius:16px; font-size:.85rem; }
+  #dMembers i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  #dDelete { background:none; color:var(--red); border:1px solid var(--red); padding:11px; }
+  #dClose { background:var(--panel2); color:var(--text); padding:11px; }
+  .gridEv, #allDayRow .chip { cursor:pointer; }
   #memberChips { display:flex; flex-wrap:wrap; gap:6px; }
   #memberChips button { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
     padding:7px 12px; border-radius:20px; font-size:.85rem; }
@@ -312,6 +325,21 @@
       <button type="submit" id="evSave" class="gold">Add to family calendar</button>
       <button type="button" id="evCancel">Cancel</button>
     </form>
+  </div>
+
+  <!-- event details sheet -->
+  <div id="detailModal" class="hidden">
+    <div class="sheet">
+      <h3 id="dTitle"></h3>
+      <div class="dRow"><div class="ic">🕐</div><div class="v" id="dWhen"></div></div>
+      <div class="dRow hidden" id="dRepeatRow"><div class="ic">🔁</div><div class="v" id="dRepeat"></div></div>
+      <div class="dRow hidden" id="dLocRow"><div class="ic">📍</div><div class="v" id="dLoc"></div></div>
+      <div class="dRow hidden" id="dDescRow"><div class="ic">📝</div><div class="v" id="dDesc"></div></div>
+      <div class="dRow"><div class="ic">📅</div><div class="v" id="dCal"></div></div>
+      <div class="dRow hidden" id="dWhoRow"><div class="ic">👥</div><div class="v"><div id="dMembers"></div></div></div>
+      <button id="dDelete" class="hidden">Delete event</button>
+      <button id="dClose">Close</button>
+    </div>
   </div>
 
   <div id="toast"></div>
