@@ -18,6 +18,19 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
+  /* ── daylight theme (sunrise→sunset): beige/taupe/grey/light blue ── */
+  body.daylight {
+    --bg:#e8e4da; --panel:#f3f0e8; --panel2:#fbfaf5; --text:#2e2c26; --dim:#7c7668;
+    --line:#d6d0c2; --accent:#5b87a6; --accent-dark:#f7fafc;
+    --gold-grad:linear-gradient(90deg,#6d95b2,#9dbcd2);
+  }
+  body.daylight nav { background:rgba(243,240,232,.97); }
+  body.daylight .msg.mine { background:#cfdfeb; }
+  body.daylight .msg.mine .from { color:#4c6e88; }
+  body.daylight .msg.announce { background:#ece4cd; border-color:#b49b4e; }
+  body.daylight .wkDay.today { background:#edf2f6; }
+  body.daylight .valueBadge { background:rgba(91,135,166,.12); color:#3f6a88; border-color:rgba(91,135,166,.4); }
+  body.daylight #toast { border-color:var(--accent); }
   html, body { height:100%; }
   body { background:var(--bg); color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif; }
@@ -137,6 +150,15 @@
   .histRow .amt { min-width:56px; font-variant-numeric:tabular-nums; font-weight:700; }
   .histRow .amt.plus { color:#69c47a; } .histRow .amt.minus { color:var(--red); }
 
+  /* ── meal plan ─────────────────────────────────────────────── */
+  .mealRow { display:flex; gap:6px; align-items:center; padding:5px 0 2px; }
+  .mealRow .mealDay { min-width:54px; color:var(--dim); font-size:.78rem; text-transform:uppercase; }
+  .mealRow input { padding:8px 10px; font-size:.9rem; }
+  .mealRow .cart { background:none; border:1px solid var(--line); border-radius:9px; padding:6px 9px; }
+  .mIng { margin:0 0 6px 60px; width:calc(100% - 60px); padding:6px 10px !important;
+    font-size:.78rem !important; color:var(--dim); }
+  .mealRead { flex:1; font-size:.9rem; padding:6px 0; }
+
   #allDayRow { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 8px; }
   #allDayRow .chip { background:var(--panel2); border-left:3px solid var(--c,var(--accent));
     border-radius:8px; padding:5px 10px; font-size:.8rem; font-weight:600; }
@@ -249,6 +271,9 @@
   #saver.night #saverClock { color:rgba(210,216,232,.72); }
   #saverHorizon { position:absolute; left:0; right:0; bottom:9vh; border-top:1px solid rgba(212,175,55,.18); }
   #saver.night #saverHorizon { border-top-color:rgba(160,170,200,.14); }
+  #saverExtras { position:absolute; left:50%; bottom:4.4vh; transform:translateX(-50%);
+    display:flex; gap:3vmin; font-size:2.5vmin; color:rgba(212,175,55,.8); white-space:nowrap; }
+  #saver.night #saverExtras { color:rgba(190,200,225,.65); }
 </style>
 </head>
 <body>
@@ -291,6 +316,10 @@
         <div id="weekGrid" class="hidden"></div>
       </section>
       <section id="view-lists" class="hidden">
+        <div class="card"><h3>🍽 Meal plan</h3>
+          <div id="mealList"></div>
+          <div class="note" id="mealNote">Tap 🛒 to send a dinner's ingredients straight to the grocery list.</div>
+        </div>
         <div class="card"><h3>🛒 Grocery list</h3>
           <form id="addGroceryForm" class="row">
             <input id="gName" placeholder="Add an item…" required autocomplete="off">
@@ -307,6 +336,12 @@
             </div>
             <div class="row">
               <input id="tValue" type="number" min="0" step="0.25" inputmode="decimal" placeholder="Worth $ (optional)">
+              <select id="tRepeat" style="max-width:46%">
+                <option value="">One-time</option>
+                <option value="daily">Daily chore</option>
+                <option value="weekly">Weekly chore</option>
+                <option value="monthly">Monthly chore</option>
+              </select>
             </div>
             <button type="submit" class="gold">Assign task</button>
           </form>
@@ -356,6 +391,17 @@
             • <b>iPhone/iCloud</b>: Calendar app → Calendars → tap <b>ⓘ</b> next to a calendar → turn on <i>Public Calendar</i> → Share Link.<br>
             • <b>School / sports sites</b>: look for a “Subscribe”, “iCal”, or “Add to calendar” link.<br>
             Events refresh automatically every few minutes (view-only).</div>
+        </div>
+        <div class="card"><h3>⏳ Countdowns</h3>
+          <div id="cdList"></div>
+          <form id="addCdForm">
+            <div class="row">
+              <input id="cdLabel" placeholder="Event (e.g. Disney trip)" required>
+              <input id="cdDate" type="date" required style="max-width:46%">
+            </div>
+            <button type="submit" class="gold">Add countdown</button>
+          </form>
+          <div class="note">Countdowns show on the screensaver for the whole family.</div>
         </div>
         <div class="card"><h3>💰 Allowance &amp; earnings</h3>
           <div id="earnBalances"></div>
@@ -432,6 +478,7 @@
     <div id="celestial" class="sun"></div>
     <div id="saverHorizon"></div>
     <div id="saverClock"></div>
+    <div id="saverExtras"></div>
   </div>
 
   <div id="toast"></div>

@@ -98,6 +98,7 @@ async function boot() {
     switchTab('today');
     updateNotifBar();
     loadEarnings();
+    loadCountdowns();
     pollSos();
     setInterval(pollSos, 20_000);
     syncWakeLock(); // big screens: hold the display awake from sign-in
@@ -231,8 +232,10 @@ function showSaver(forceNight = null) {
     tickSaverClock();
     applySaverMode();      // flips sun→moon live at 9pm
     positionCelestial();   // guarantees motion even if rAF is throttled
+    if (new Date().getSeconds() === 0) renderSaverExtras(); // weather/countdowns refresh
   }, 1000);
   tickSaverClock();
+  renderSaverExtras();
 }
 
 /** Wake requests from user input — filtered so the screensaver doesn't
@@ -292,6 +295,19 @@ function tickSaverClock() {
     <small>${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</small>`;
 }
 
+/** Bowling Green weather + the next countdowns, under the clock. */
+async function renderSaverExtras() {
+  const parts = [];
+  const w = await getWeather();
+  if (w) parts.push(`${w.tempF}° ${w.text}`);
+  for (const cd of (state.countdowns ?? []).slice(0, 2)) {
+    const d = daysUntil(cd.targetDate);
+    parts.push(d === 0 ? `🎉 ${esc(cd.label)} is today!`
+      : `${esc(cd.label)} in ${d} day${d === 1 ? '' : 's'}`);
+  }
+  $('saverExtras').innerHTML = parts.map((p) => `<span>${p}</span>`).join('<span>·</span>');
+}
+
 // idle detection: any interaction resets the 30-minute clock.
 // Taps/keys wake the screensaver immediately (after the start grace);
 // mouse movement only wakes it after ~60px of deliberate motion, so a
@@ -331,6 +347,142 @@ $('exitTv').addEventListener('click', exitTv);
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && document.body.classList.contains('tv')) exitTv();
 });
+
+// ----------------------------------------------------------------
+// Weather + sun times (Bowling Green, KY) — Open-Meteo, no key.
+// Drives the daylight theme and the screensaver's weather line.
+// ----------------------------------------------------------------
+
+const WX_URL = 'https://api.open-meteo.com/v1/forecast?latitude=36.99&longitude=-86.443'
+  + '&current=temperature_2m,weather_code&daily=sunrise,sunset'
+  + '&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=1';
+const WX_TEXT = {
+  0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Cloudy', 45: 'Foggy', 48: 'Foggy',
+  51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
+  66: 'Freezing rain', 67: 'Freezing rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow',
+  77: 'Snow', 80: 'Showers', 81: 'Showers', 82: 'Heavy showers', 85: 'Snow showers',
+  86: 'Snow showers', 95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm',
+};
+let wx = null;
+
+async function getWeather() {
+  if (wx && Date.now() - wx.fetchedAt < 30 * 60_000) return wx;
+  try {
+    const r = await (await fetch(WX_URL)).json();
+    wx = {
+      tempF: Math.round(r.current.temperature_2m),
+      text: WX_TEXT[r.current.weather_code] ?? '',
+      sunrise: new Date(r.daily.sunrise[0]).getTime(),
+      sunset: new Date(r.daily.sunset[0]).getTime(),
+      fetchedAt: Date.now(),
+    };
+  } catch { /* offline: keep last reading */ }
+  return wx;
+}
+
+/** Light beige/blue theme sunrise→sunset; gold/black after sundown. */
+async function updateTheme() {
+  const w = await getWeather();
+  const now = Date.now();
+  const isDay = w
+    ? now >= w.sunrise && now < w.sunset
+    : (() => { const h = new Date().getHours(); return h >= 7 && h < 20; })(); // offline fallback
+  document.body.classList.toggle('daylight', isDay);
+}
+updateTheme();
+setInterval(updateTheme, 60_000);
+
+// ----------------------------------------------------------------
+// Countdowns — admin-managed, shown on the screensaver
+// ----------------------------------------------------------------
+
+async function loadCountdowns() {
+  try {
+    const { countdowns } = await apiFetch('/countdowns');
+    state.countdowns = countdowns;
+    if (isParent()) renderCountdownAdmin();
+  } catch { /* transient */ }
+}
+
+const daysUntil = (dateStr) =>
+  Math.ceil((new Date(`${dateStr}T00:00`) - startOfDay(new Date())) / DAY_MS);
+
+function renderCountdownAdmin() {
+  $('cdList').innerHTML = (state.countdowns ?? []).map((cd) => {
+    const d = daysUntil(cd.targetDate);
+    return `<div class="memberRow">⏳ ${esc(cd.label)}
+      <span class="role">${d === 0 ? 'today!' : `${d} day${d === 1 ? '' : 's'}`}
+      <button data-cd="${cd.id}" style="background:none;color:var(--red);padding:2px 6px">✕</button></span></div>`;
+  }).join('') || '<div class="allDone">No countdowns yet.</div>';
+  $('cdList').querySelectorAll('button[data-cd]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      await apiFetch(`/countdowns/${b.dataset.cd}`, { method: 'DELETE' });
+      loadCountdowns();
+    }));
+}
+
+$('addCdForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await apiFetch('/countdowns', {
+      method: 'POST',
+      body: JSON.stringify({ label: $('cdLabel').value.trim(), targetDate: $('cdDate').value }),
+    });
+    e.target.reset();
+    toast('Countdown added ✓');
+    loadCountdowns();
+  } catch (err) { toast(err.message); }
+});
+
+// ----------------------------------------------------------------
+// Meal plan — next 7 dinners; ingredients push to the grocery list
+// ----------------------------------------------------------------
+
+async function loadMeals() {
+  const from = localDateKey(new Date());
+  const to = localDateKey(new Date(Date.now() + 6 * DAY_MS));
+  const { meals } = await apiFetch(`/meals?from=${from}&to=${to}`);
+  const byDate = Object.fromEntries(meals.map((m) => [m.mealDate, m]));
+  const canEdit = state.me.role !== 'child';
+  const days = [...Array(7)].map((_, i) => new Date(Date.now() + i * DAY_MS));
+
+  $('mealList').innerHTML = days.map((d) => {
+    const key = localDateKey(d);
+    const meal = byDate[key];
+    const label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+    if (!canEdit) {
+      return `<div class="mealRow"><span class="mealDay">${label}</span>
+        <span class="mealRead">${meal ? esc(meal.title) : '<span style="color:var(--dim)">—</span>'}</span></div>`;
+    }
+    return `<div class="mealRow"><span class="mealDay">${label}</span>
+        <input class="mTitle" data-date="${key}" value="${esc(meal?.title ?? '')}" placeholder="Dinner…">
+        ${meal?.ingredients ? `<button class="cart" data-cart="${key}" title="Send ingredients to grocery list">🛒</button>` : ''}
+      </div>
+      <input class="mIng" data-date="${key}" value="${esc(meal?.ingredients ?? '')}"
+        placeholder="ingredients, comma separated">`;
+  }).join('');
+  $('mealNote').classList.toggle('hidden', !canEdit);
+
+  const save = async (key) => {
+    const title = $('mealList').querySelector(`.mTitle[data-date="${key}"]`).value.trim();
+    const ingredients = $('mealList').querySelector(`.mIng[data-date="${key}"]`).value.trim();
+    await apiFetch(`/meals/${key}`, {
+      method: 'PUT', body: JSON.stringify({ title, ingredients }),
+    });
+    loadMeals();
+  };
+  $('mealList').querySelectorAll('.mTitle, .mIng').forEach((el) =>
+    el.addEventListener('change', () => save(el.dataset.date)));
+  $('mealList').querySelectorAll('button[data-cart]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const names = ($('mealList').querySelector(`.mIng[data-date="${b.dataset.cart}"]`).value)
+        .split(',').map((s) => s.trim()).filter(Boolean);
+      if (!names.length) return;
+      await apiFetch('/grocery', { method: 'POST', body: JSON.stringify({ names }) });
+      toast(`${names.length} ingredient${names.length === 1 ? '' : 's'} → grocery list ✓`);
+      loadLists();
+    }));
+}
 
 // ----------------------------------------------------------------
 // Earnings (allowance): chips on the main screen, admin card
@@ -396,6 +548,7 @@ $('adjustForm').addEventListener('submit', async (e) => {
 // ----------------------------------------------------------------
 
 async function loadLists() {
+  loadMeals();
   const [{ items }, { tasks }] = await Promise.all([
     apiFetch('/grocery'), apiFetch('/tasks'),
   ]);
@@ -423,7 +576,7 @@ async function loadLists() {
       ${list.map((t) => `
         <div class="checkRow">
           <button class="tick" data-t="${t.id}" aria-label="mark done"></button>
-          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}</div>
+          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq}</span>` : ''}</div>
         </div>`).join('') || '<div class="allDone">All done ✓</div>'}
     </div>`;
   }).join('');
@@ -467,9 +620,10 @@ $('addTaskForm').addEventListener('submit', async (e) => {
         title,
         memberId: $('tMember').value,
         value: Number($('tValue').value) || 0,
+        repeatFreq: $('tRepeat').value || undefined,
       }),
     });
-    $('tTitle').value = ''; $('tValue').value = '';
+    $('tTitle').value = ''; $('tValue').value = ''; $('tRepeat').value = '';
     toast('Task assigned ✓');
     loadLists();
   } catch (err) { toast(err.message); }
@@ -899,6 +1053,7 @@ async function loadAdmin() {
   loadCalendars();
   loadDevices();
   loadEarnings();
+  loadCountdowns();
   $('memberList').innerHTML = state.members.map((m) => {
     const login = m.email ? esc(m.email)
       : m.authUserId ? `signs in as “${esc(m.displayName.toLowerCase())}”` : 'no login';
