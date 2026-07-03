@@ -75,8 +75,9 @@
   .dayPill.sel small, .dayPill.sel b { color:var(--accent-dark); }
   #dayHead { display:flex; align-items:center; justify-content:center; gap:10px; padding:2px 14px 8px; }
   #dayTitle { font-weight:700; font-size:.95rem; flex:1; text-align:center; }
-  #tvBtn { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
+  #tvBtn, #sleepBtn { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
     font-size:.75rem; padding:5px 10px; border-radius:16px; }
+  body.tv #sleepBtn { display:inline-block !important; } /* stays usable on the TV */
   #viewSeg { display:flex; background:var(--panel2); border:1px solid var(--line);
     border-radius:16px; overflow:hidden; }
   #viewSeg button { background:none; color:var(--dim); font-size:.75rem; padding:5px 12px; border-radius:0; }
@@ -268,6 +269,7 @@
           </div>
           <div id="dayTitle"></div>
           <button id="tvBtn" title="Optimize for a TV or computer screen">📺 TV</button>
+          <button id="sleepBtn" title="Start the screensaver now">😴</button>
         </div>
         <div id="allDayRow"></div>
         <div id="gridWrap"><div id="timeGrid"></div></div>

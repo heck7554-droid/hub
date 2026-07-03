@@ -202,7 +202,7 @@ const IDLE_MS = 30 * 60_000;      // screensaver after 30 minutes
 const ARC_MS = 15 * 60_000;       // one arc pass every 15 minutes
 const NIGHT_START = 21, NIGHT_END = 6; // 9pm → 6am
 
-const saver = { active: false, raf: null, clockTimer: null, forceNight: null };
+const saver = { active: false, raf: null, clockTimer: null, forceNight: null, shownAt: 0 };
 let lastActivity = Date.now();
 
 const isNightNow = () => {
@@ -214,6 +214,7 @@ const isNightNow = () => {
 function showSaver(forceNight = null) {
   if (saver.active) return;
   saver.active = true;
+  saver.shownAt = Date.now();
   saver.forceNight = forceNight;
   $('saver').classList.remove('hidden');
   applySaverMode();
@@ -234,6 +235,9 @@ function showSaver(forceNight = null) {
 
 function hideSaver() {
   if (!saver.active) return;
+  // grace period: the tap/mouse-jiggle that STARTED sleep mode must not
+  // immediately wake it back up
+  if (Date.now() - saver.shownAt < 1500) return;
   saver.active = false;
   saver.forceNight = null;
   $('saver').classList.add('hidden');
@@ -297,6 +301,9 @@ addEventListener('mousemove', () => {
 setInterval(() => {
   if (!saver.active && session.access && Date.now() - lastActivity >= IDLE_MS) showSaver();
 }, 30_000);
+
+// manual sleep: start the screensaver on demand (sun/moon follows the clock)
+$('sleepBtn').addEventListener('click', () => showSaver());
 
 // manual/testing hook: window.hubSaver.show(true) previews night mode
 window.hubSaver = { show: showSaver, hide: hideSaver };
