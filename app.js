@@ -139,7 +139,7 @@ function switchTab(tab) {
   $('addEventBtn').classList.toggle('hidden', tab !== 'today' || !canAddEvents());
   $('tabs').querySelectorAll('button').forEach((b) =>
     b.classList.toggle('active', b.dataset.tab === tab));
-  if (tab === 'today') renderDayView();
+  if (tab === 'today') { renderDayView(); loadTodayChores(); }
   if (tab === 'lists') loadLists();
   if (tab === 'messages') loadMessages();
   if (tab === 'admin') loadAdmin();
@@ -909,6 +909,47 @@ function layoutColumns(events) {
 const localDateKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtTime = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+// ----------------------------------------------------------------
+// Today's chores — kids' open tasks right on the main page.
+// A child sees their own list; parents see every kid's. Ticking
+// completes (and pays) exactly like the Lists tab.
+// ----------------------------------------------------------------
+
+async function loadTodayChores() {
+  try {
+    const { tasks } = await apiFetch('/tasks');
+    const childIds = new Set(state.members.filter((m) => m.role === 'child').map((m) => m.id));
+    const mine = state.me.role === 'child'
+      ? tasks.filter((t) => t.memberId === state.me.id)
+      : tasks.filter((t) => childIds.has(t.memberId));
+    const colorOf = Object.fromEntries(state.members.map((m) => [m.id, m.color]));
+    const nameOf = Object.fromEntries(state.members.map((m) => [m.id, m.displayName]));
+
+    $('choresToday').innerHTML = mine.length ? `<div class="card">
+      <h4>${state.me.role === 'child' ? 'Your tasks' : "Kids' tasks"}</h4>
+      ${mine.map((t) => `
+        <div class="checkRow">
+          <button class="tick" data-ct="${t.id}" aria-label="mark done"></button>
+          ${state.me.role !== 'child'
+            ? `<span class="who"><i style="background:${colorOf[t.memberId]}"></i>${esc(nameOf[t.memberId] ?? '')}</span>` : ''}
+          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+    $('choresToday').querySelectorAll('button[data-ct]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.closest('.checkRow').style.opacity = '0.35';
+        const { task, earnedCents } = await apiFetch(`/tasks/${b.dataset.ct}/complete`, { method: 'POST' });
+        if (earnedCents > 0) {
+          const who = state.members.find((m) => m.id === task.memberId);
+          toast(`${who?.id === state.me.id ? 'You' : who?.displayName ?? 'They'} earned ${money(earnedCents)} 🎉`);
+          loadEarnings();
+        }
+        loadTodayChores();
+      }));
+  } catch { /* transient */ }
+}
 
 // ----------------------------------------------------------------
 // Custom events (composer sheet)

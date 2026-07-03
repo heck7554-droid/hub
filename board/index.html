@@ -17,8 +17,12 @@
     padding: 2.2vw; display: flex; flex-direction: column; gap: 1.4vw;
   }
   /* ── header ─────────────────────────────────────── */
-  header { display: flex; align-items: baseline; justify-content: space-between; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 1vw; }
   header h1 { font-size: 2.2vw; font-weight: 700; letter-spacing: -.02em; }
+  #tvModeBtn { background: var(--panel2); color: var(--dim); border: 1px solid var(--line);
+    font-size: .95vw; padding: .5vw 1vw; border-radius: 1vw; cursor: pointer; }
+  body.tv #tvModeBtn { display: none; }
+  body.tv { cursor: none; }
   #clock { font-size: 2.2vw; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
   #members { display: flex; gap: .9vw; }
   .member { display: flex; align-items: center; gap: .45vw; font-size: 1.05vw; color: var(--dim); }
@@ -30,6 +34,15 @@
     border-radius: 1vw; padding: 1.1vw 1.5vw; font-size: 1.5vw; font-weight: 600;
   }
   #banner small { display: block; font-size: .95vw; font-weight: 400; opacity: .75; margin-top: .2vw; }
+  /* ── kids' task strip ───────────────────────────── */
+  #tasksStrip { display: flex; gap: 1vw; flex-wrap: wrap; }
+  .taskChip { display: flex; align-items: center; gap: .6vw; background: var(--panel);
+    border-radius: 1vw; padding: .7vw 1.1vw; font-size: 1.05vw; }
+  .taskChip i { width: .8vw; height: .8vw; border-radius: 50%; display: inline-block; }
+  .taskChip b { font-size: 1.05vw; }
+  .taskChip .todo { color: var(--dim); }
+  .taskChip .val { color: var(--accent); font-weight: 700; }
+
   /* ── week grid ──────────────────────────────────── */
   #week { display: grid; grid-template-columns: repeat(7, 1fr); gap: .8vw; flex: 1; }
   .day { background: var(--panel); border-radius: 1vw; padding: 1vw; display: flex; flex-direction: column; gap: .6vw; min-height: 30vw; }
@@ -73,8 +86,10 @@
     <h1>🏠 The Family Hub</h1>
     <div id="members"></div>
     <div id="clock"></div>
+    <button id="tvModeBtn" title="Fullscreen + keep screen awake">📺 TV mode</button>
   </header>
   <div id="banner"></div>
+  <div id="tasksStrip" style="display:none"></div>
   <main id="week" style="display:none"></main>
   <footer style="display:none">updates every minute · <span id="updated"></span></footer>
 
@@ -112,8 +127,19 @@ async function refresh() {
   render(await res.json());
 }
 
-function render({ events, announcements, members }) {
+function render({ events, announcements, members, tasks }) {
   const colorOf = Object.fromEntries(members.map((m) => [m.id, m.color]));
+
+  // kids' chore lists under the header
+  const strip = document.getElementById('tasksStrip');
+  const kids = members.filter((m) => m.role === 'child');
+  const byKid = kids.map((k) => ({ k, list: (tasks ?? []).filter((t) => t.memberId === k.id) }));
+  strip.style.display = byKid.some(({ list }) => list.length) ? 'flex' : 'none';
+  strip.innerHTML = byKid.filter(({ list }) => list.length).map(({ k, list }) => `
+    <span class="taskChip"><i style="background:${k.color}"></i><b>${esc(k.displayName)}:</b>
+      <span class="todo">${list.map((t) =>
+        `${esc(t.title)}${t.valueCents > 0 ? ` <span class="val">$${(t.valueCents / 100).toFixed(2)}</span>` : ''}`
+      ).join(' · ')}</span></span>`).join('');
   els.members.innerHTML = members.map((m) =>
     `<span class="member"><i style="background:${m.color}"></i>${m.displayName}</span>`).join('');
 
@@ -157,8 +183,28 @@ function boot() {
   const paired = !!token();
   els.pairing.style.display = paired ? 'none' : 'grid';
   for (const el of [els.header, els.week, els.footer]) el.style.display = paired ? '' : 'none';
-  if (paired) { refresh(); tickClock(); }
+  if (paired) { refresh(); tickClock(); keepAwake(); }
 }
+
+// ── TV mode: fullscreen + never sleep ─────────────────────────
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    wakeLock = await navigator.wakeLock?.request('screen');
+    wakeLock?.addEventListener('release', () => { wakeLock = null; });
+  } catch { /* unsupported: TV mode still fullscreens */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && token()) keepAwake();
+});
+document.getElementById('tvModeBtn').addEventListener('click', async () => {
+  document.body.classList.add('tv');
+  try { await document.documentElement.requestFullscreen?.(); } catch { /* some TVs: zoomless fullscreen only */ }
+  keepAwake();
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) document.body.classList.remove('tv');
+});
 setInterval(refresh, 60_000);
 setInterval(tickClock, 10_000);
 boot();

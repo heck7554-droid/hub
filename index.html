@@ -138,6 +138,17 @@
   .valueBadge { background:rgba(212,175,55,.16); color:var(--accent); border:1px solid rgba(212,175,55,.35);
     border-radius:10px; padding:1px 8px; font-size:.75rem; font-weight:700; margin-left:8px; white-space:nowrap; }
 
+  /* ── today's chores (main page) ────────────────────────────── */
+  #choresToday { margin:0 14px 8px; }
+  #choresToday:empty { display:none; }
+  #choresToday .card { margin-top:0; padding:10px 14px; }
+  #choresToday h4 { font-size:.78rem; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.07em; margin-bottom:2px; }
+  #choresToday .checkRow { padding:7px 2px; }
+  #choresToday .who { display:inline-flex; align-items:center; gap:6px; color:var(--dim);
+    font-size:.78rem; min-width:64px; }
+  #choresToday .who i { width:8px; height:8px; border-radius:50%; }
+
   /* ── earnings ──────────────────────────────────────────────── */
   #earnStrip { display:flex; gap:8px; overflow-x:auto; padding:2px 14px 8px; scrollbar-width:none; }
   #earnStrip:empty { display:none; }
@@ -321,6 +332,7 @@
     <main>
       <section id="view-today" style="padding:0">
         <div id="earnStrip"></div>
+        <div id="choresToday"></div>
         <div id="dayStrip"></div>
         <div id="dayHead">
           <div id="viewSeg">
