@@ -354,7 +354,7 @@
               <select id="tMember" style="max-width:38%"></select>
             </div>
             <div class="row">
-              <input id="tValue" type="number" min="0" step="0.25" inputmode="decimal" placeholder="Worth $ (optional)">
+              <input id="tValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Worth $ (optional)">
               <select id="tRepeat" style="max-width:46%">
                 <option value="">One-time</option>
                 <option value="daily">Daily chore</option>
@@ -443,7 +443,7 @@
           <form id="adjustForm">
             <div class="row">
               <select id="ajMember" style="max-width:38%"></select>
-              <input id="ajAmount" type="number" min="0.01" step="0.25" inputmode="decimal" placeholder="$ used" required>
+              <input id="ajAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="$ used" required>
             </div>
             <input id="ajNote" placeholder="What was it spent on? (optional)">
             <button type="submit" class="gold">Deduct from balance</button>
