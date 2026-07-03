@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Siri Setup</title>
+<style>
+  :root { --bg:#000; --panel:#141414; --panel2:#1e1e1e; --text:#f3efe6; --dim:#9b937f;
+    --line:#2b2b28; --accent:#d4af37; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); padding:22px 16px 60px; max-width:640px; margin:0 auto;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; line-height:1.55; }
+  h1 { color:var(--accent); font-size:1.5rem; margin-bottom:6px; }
+  h2 { color:var(--accent); font-size:1.05rem; margin:26px 0 8px; }
+  p, li { color:var(--text); font-size:.95rem; }
+  .dim { color:var(--dim); font-size:.85rem; }
+  ol { padding-left:22px; display:flex; flex-direction:column; gap:7px; margin:10px 0; }
+  code { background:var(--panel2); border:1px solid var(--line); border-radius:6px;
+    padding:2px 7px; font-size:.8rem; word-break:break-all; }
+  .card { background:var(--panel); border-radius:14px; padding:16px; margin-top:12px; }
+  .say { color:var(--accent); font-weight:700; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:.85rem; }
+  td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { color:var(--dim); white-space:nowrap; }
+</style>
+</head>
+<body>
+  <h1>🗣 Siri setup</h1>
+  <p class="dim">One-time setup per phone, about 3 minutes per shortcut. You need the
+    personal key a parent created in the app (Admin → Siri shortcuts).</p>
+
+  <h2>The one shortcut recipe (used by all four)</h2>
+  <ol>
+    <li>Open the <b>Shortcuts</b> app → tap <b>+</b> to make a new shortcut.</li>
+    <li>Add the action <b>Get Contents of URL</b>.</li>
+    <li>Paste the <b>URL</b> for the command you want (table below).</li>
+    <li>Tap the little <b>▸ arrow</b> on the action → Method: <b>GET</b> →
+      <b>Headers</b> → add one: key <code>Authorization</code>,
+      value <code>Bearer hub_YOURKEY</code> <span class="dim">(the word Bearer, a space, then the whole key)</span>.</li>
+    <li>Add the action <b>Get Dictionary Value</b> → get value for <b>key</b> → type <code>text</code>.</li>
+    <li>Add the action <b>Speak Text</b> (or <b>Show Result</b> if you prefer reading).</li>
+    <li>Name the shortcut with the phrase you want to say, then tap <b>Done</b>.</li>
+  </ol>
+
+  <h2>The four commands</h2>
+  <div class="card">
+    <table>
+      <tr><td>Say</td><td class="say">"Hey Siri, today at a glance"</td></tr>
+      <tr><td>URL</td><td><code>https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api/siri/today</code></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <table>
+      <tr><td>Say</td><td class="say">"Hey Siri, what's for dinner"</td></tr>
+      <tr><td>URL</td><td><code>https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api/siri/dinner</code></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <table>
+      <tr><td>Say</td><td class="say">"Hey Siri, what's my allowance"</td></tr>
+      <tr><td>URL</td><td><code>https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api/siri/balance</code></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <table>
+      <tr><td>Say</td><td class="say">"Hey Siri, add to the list"</td></tr>
+      <tr><td>URL</td><td><code>https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api/siri/grocery-add?item=</code></td></tr>
+      <tr><td>Extra step</td><td>Before <i>Get Contents of URL</i>, add the action <b>Dictate Text</b>.
+        Then tap the end of the URL and insert the <b>Dictated Text</b> variable right after <code>item=</code>.
+        Siri will ask what to add, then confirm: <i>"Added milk to the grocery list."</i></td></tr>
+    </table>
+  </div>
+
+  <h2>Notes</h2>
+  <p class="dim">• Each person uses their own key — allowance answers are personal, and a parent can
+    revoke any phone's key in Admin without touching the others.<br>
+    • The key never expires; treat it like a house key.<br>
+    • Works from Apple Watch and CarPlay too, since Shortcuts sync across devices.</p>
+</body>
+</html>

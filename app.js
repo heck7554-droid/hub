@@ -1203,6 +1203,7 @@ async function loadAdmin() {
   loadDevices();
   loadEarnings();
   loadCountdowns();
+  loadSiriKeys();
   $('memberList').innerHTML = state.members.map((m) => {
     const login = m.email ? esc(m.email)
       : m.authUserId ? `signs in as “${esc(m.displayName.toLowerCase())}”` : 'no login';
@@ -1306,6 +1307,45 @@ async function loadDevices() {
       toast('Display revoked ✓');
     }));
 }
+
+async function loadSiriKeys() {
+  const nameOf = Object.fromEntries(state.members.map((m) => [m.id, m.displayName]));
+  const { keys } = await apiFetch('/siri/keys');
+  $('siriKeyList').innerHTML = keys.map((k) => {
+    const used = k.lastUsedAt
+      ? `used ${new Date(k.lastUsedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+      : 'never used';
+    return `<div class="memberRow">🔑 ${esc(nameOf[k.memberId] ?? '?')}
+      <span class="role">${used}
+      <button data-sk="${k.id}" style="background:none;color:var(--red);padding:2px 8px">Revoke</button></span></div>`;
+  }).join('');
+  $('skMember').innerHTML = state.members.filter((m) => m.authUserId || m.email)
+    .map((m) => `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  $('siriKeyList').querySelectorAll('button[data-sk]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('Revoke this Siri key? Their shortcuts stop working immediately.')) return;
+      await apiFetch(`/siri/keys/${b.dataset.sk}`, { method: 'DELETE' });
+      loadSiriKeys();
+    }));
+}
+
+$('siriKeyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const { key, memberName } = await apiFetch('/siri/keys', {
+      method: 'POST', body: JSON.stringify({ memberId: $('skMember').value }),
+    });
+    $('siriKeyValue').textContent = key;
+    $('siriKeyResult').classList.remove('hidden');
+    toast(`Siri key for ${memberName} created ✓`);
+    loadSiriKeys();
+  } catch (err) { toast(err.message); }
+});
+
+$('siriKeyCopy').addEventListener('click', async () => {
+  await navigator.clipboard.writeText($('siriKeyValue').textContent).catch(() => {});
+  toast('Key copied ✓');
+});
 
 $('pairBtn').addEventListener('click', async () => {
   const { code } = await apiFetch('/devices/pairing-code', {

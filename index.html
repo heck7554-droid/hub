@@ -452,6 +452,23 @@
           <div class="note">Tasks with a $ value credit the child automatically when checked off.
             Deduct here as they spend it.</div>
         </div>
+        <div class="card"><h3>🗣 Siri shortcuts</h3>
+          <div id="siriKeyList"></div>
+          <form id="siriKeyForm" class="row">
+            <select id="skMember" style="flex:1"></select>
+            <button type="submit" class="gold" style="padding:0 16px">Create key</button>
+          </form>
+          <div id="siriKeyResult" class="hidden" style="margin-top:10px">
+            <div class="note" style="color:var(--accent)">Copy this key now — it's shown only once:</div>
+            <div id="siriKeyValue" style="font-family:monospace;font-size:.72rem;word-break:break-all;
+              background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin:6px 0"></div>
+            <button id="siriKeyCopy" class="gold" style="padding:8px 14px;font-size:.85rem">Copy key</button>
+          </div>
+          <div class="note">One key per person's phone. Then follow the
+            <a href="./siri.html" target="_blank" style="color:var(--accent)">setup guide</a> —
+            “Hey Siri, add milk to the list”, “what's for dinner”, “today at a glance”,
+            “what's my allowance”.</div>
+        </div>
         <div class="card"><h3>Home displays (TV / iPad)</h3>
           <div id="deviceList"></div>
           <button id="pairBtn" class="gold" style="padding:11px;width:100%">Create pairing code</button>
