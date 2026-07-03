@@ -116,7 +116,8 @@ function buildTabs() {
   const tabs = [
     { id: 'today', label: 'Today', icon: '📅' },
     { id: 'lists', label: 'Lists', icon: '📝' },
-    { id: 'messages', label: 'Messages', icon: '💬' },
+    { id: 'messages', label: 'Chat', icon: '💬' },
+    { id: 'games', label: 'Games', icon: '🎲' },
     { id: 'sos', label: 'SOS', icon: '🆘' },
     ...(isParent() ? [{ id: 'admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
@@ -131,7 +132,7 @@ function buildTabs() {
 
 function switchTab(tab) {
   state.tab = tab;
-  for (const view of ['today', 'lists', 'messages', 'sos', 'admin']) {
+  for (const view of ['today', 'lists', 'messages', 'games', 'sos', 'admin']) {
     $(`view-${view}`).classList.toggle('hidden', view !== tab);
   }
   $('composer').classList.toggle('hidden', tab !== 'messages');
@@ -1001,6 +1002,154 @@ async function sendMessage() {
     method: 'POST', body: JSON.stringify({ body }),
   });
   loadMessages();
+}
+
+// ----------------------------------------------------------------
+// Games: fun facts, jokes, would-you-rather — fresh on every tap.
+// Facts and jokes pull from free public services (with a kid-safety
+// filter); everything falls back to bundled packs offline.
+// ----------------------------------------------------------------
+
+const FACTS_PACK = [
+  'Octopuses have three hearts — and two of them stop beating when they swim.',
+  'A group of flamingos is called a "flamboyance."',
+  'Honey never spoils. Archaeologists have eaten 3,000-year-old honey from Egyptian tombs.',
+  'Your nose can remember about 50,000 different smells.',
+  'A day on Venus is longer than a year on Venus.',
+  'Sea otters hold hands while they sleep so they don\'t drift apart.',
+  'Bananas are berries, but strawberries aren\'t.',
+  'The Eiffel Tower grows about 6 inches taller in summer because metal expands in heat.',
+  'Sloths can hold their breath longer than dolphins — up to 40 minutes.',
+  'There are more trees on Earth than stars in the Milky Way.',
+  'A bolt of lightning is five times hotter than the surface of the sun.',
+  'Cows have best friends and get stressed when separated.',
+  'The wood frog can freeze solid all winter and thaw back to life in spring.',
+  'Astronauts grow about 2 inches taller in space.',
+  'A snail can sleep for three years straight.',
+  'Butterflies taste with their feet.',
+  'The heart of a blue whale is the size of a small car.',
+  'Kentucky has more miles of underground caves than any other place on Earth — Mammoth Cave!',
+];
+
+const JOKES_PACK = [
+  'Why don\'t eggs tell jokes?\nThey\'d crack each other up.',
+  'What do you call a fish wearing a bowtie?\nSo-fish-ticated.',
+  'Why did the math book look sad?\nIt had too many problems.',
+  'What do you call cheese that isn\'t yours?\nNacho cheese!',
+  'Why can\'t you give Elsa a balloon?\nBecause she\'ll let it go.',
+  'What did the ocean say to the beach?\nNothing, it just waved.',
+  'Why do bees have sticky hair?\nBecause they use honeycombs.',
+  'What\'s brown and sticky?\nA stick.',
+  'Why did the scarecrow win an award?\nHe was outstanding in his field.',
+  'What do you call a dinosaur that crashes his car?\nTyrannosaurus Wrecks.',
+  'How do you make a tissue dance?\nPut a little boogie in it.',
+  'What did one wall say to the other wall?\nI\'ll meet you at the corner.',
+  'Why did the golfer bring two pairs of pants?\nIn case he got a hole in one.',
+  'What do you call a sleeping bull?\nA bulldozer.',
+  'Why don\'t scientists trust atoms?\nBecause they make up everything!',
+];
+
+const WYR_PACK = [
+  ['be able to fly', 'be able to turn invisible'],
+  ['have a pet dragon', 'be a dragon'],
+  ['eat pizza for every meal', 'eat tacos for every meal'],
+  ['live in a treehouse', 'live in a castle'],
+  ['talk to animals', 'speak every human language'],
+  ['be super fast', 'be super strong'],
+  ['have no homework ever', 'have no chores ever'],
+  ['visit the Moon', 'visit the bottom of the ocean'],
+  ['be a famous athlete', 'be a famous inventor'],
+  ['have a robot best friend', 'have a dinosaur best friend'],
+  ['only whisper forever', 'only shout forever'],
+  ['have spaghetti hair', 'have marshmallow fingers'],
+  ['be 10 feet tall', 'be 10 inches tall'],
+  ['live where it\'s always summer', 'live where it\'s always snowing'],
+  ['ride a giraffe to school', 'ride a rhino to school'],
+  ['be able to pause time', 'be able to rewind time'],
+  ['have a swimming pool of Jello', 'have a trampoline floor in your house'],
+  ['never eat candy again', 'never watch a movie again'],
+  ['be the fastest kid at school', 'be the smartest kid at school'],
+  ['have a magic carpet', 'have your own submarine'],
+  ['sneeze glitter', 'burp bubbles'],
+  ['have hands for feet', 'have feet for hands'],
+  ['be a wizard', 'be a superhero'],
+  ['sleep in every day', 'never need sleep at all'],
+  ['eat a live cricket', 'eat a raw onion like an apple'],
+  ['always have to sing instead of talk', 'always have to dance everywhere you go'],
+  ['own a candy store', 'own a toy store'],
+  ['meet your favorite character', 'be in your favorite show'],
+  ['have a personal chef', 'have a personal chauffeur'],
+  ['play in the NBA', 'play in the World Cup'],
+];
+
+// facts come from the public internet — keep them kid-appropriate
+const FACT_BLOCKLIST = /\b(sex|drug|kill|murder|die[ds]?|death|alcohol|beer|wine|cigarette|nazi|war crimes?|suicide|gun|weapon)\b/i;
+
+let gameMode = null;
+const gameSeen = { fact: new Set(), joke: new Set(), wyr: new Set() };
+
+function pickFresh(pack, kind) {
+  const seen = gameSeen[kind];
+  if (seen.size >= pack.length) seen.clear();
+  let i;
+  do { i = Math.floor(Math.random() * pack.length); } while (seen.has(i));
+  seen.add(i);
+  return pack[i];
+}
+
+$('gameModes').querySelectorAll('button').forEach((b) =>
+  b.addEventListener('click', () => {
+    gameMode = b.dataset.game;
+    $('gameModes').querySelectorAll('button').forEach((x) =>
+      x.classList.toggle('on', x === b));
+    $('gameCard').classList.remove('hidden');
+    nextGame();
+  }));
+
+$('gameNext').addEventListener('click', nextGame);
+
+async function nextGame() {
+  const content = $('gameContent');
+  $('wyrOptions').classList.add('hidden');
+  content.classList.remove('hidden');
+
+  if (gameMode === 'wyr') {
+    content.innerHTML = 'Would you rather…';
+    const [a, bOpt] = pickFresh(WYR_PACK, 'wyr');
+    $('wyrA').textContent = a[0].toUpperCase() + a.slice(1);
+    $('wyrB').textContent = bOpt[0].toUpperCase() + bOpt.slice(1);
+    $('wyrA').classList.remove('picked'); $('wyrB').classList.remove('picked');
+    $('wyrOptions').classList.remove('hidden');
+    return;
+  }
+
+  content.textContent = '🎲 …';
+  if (gameMode === 'joke') {
+    try {
+      const r = await (await fetch('https://icanhazdadjoke.com/', {
+        headers: { Accept: 'application/json' } })).json();
+      content.innerHTML = `${esc(r.joke)}<small>😂 fresh from the joke machine</small>`;
+      return;
+    } catch { /* offline → pack */ }
+    content.textContent = pickFresh(JOKES_PACK, 'joke');
+  } else {
+    try {
+      const r = await (await fetch('https://uselessfacts.jsph.pl/api/v2/facts/random?language=en')).json();
+      const fact = String(r.text ?? '').trim();
+      if (fact && fact.length < 300 && !FACT_BLOCKLIST.test(fact)) {
+        content.innerHTML = `${esc(fact)}<small>🧠 true story</small>`;
+        return;
+      }
+    } catch { /* offline → pack */ }
+    content.textContent = pickFresh(FACTS_PACK, 'fact');
+  }
+}
+
+for (const id of ['wyrA', 'wyrB']) {
+  $(id).addEventListener('click', () => {
+    $('wyrA').classList.toggle('picked', id === 'wyrA');
+    $('wyrB').classList.toggle('picked', id === 'wyrB');
+  });
 }
 
 // ----------------------------------------------------------------

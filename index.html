@@ -150,6 +150,25 @@
   .histRow .amt { min-width:56px; font-variant-numeric:tabular-nums; font-weight:700; }
   .histRow .amt.plus { color:#69c47a; } .histRow .amt.minus { color:var(--red); }
 
+  /* ── games ─────────────────────────────────────────────────── */
+  #gameModes { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding-top:14px; }
+  #gameModes button { background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:18px 6px 14px; color:var(--text); display:flex; flex-direction:column; align-items:center;
+    gap:8px; font-size:.8rem; font-weight:600; line-height:1.2; }
+  #gameModes button .emoji, #gameModes button { font-size:.82rem; }
+  #gameModes button::first-line { font-size:2rem; }
+  #gameModes button.on { background:var(--gold-grad); color:var(--accent-dark); border-color:transparent; }
+  #gameCard { background:var(--panel); border-radius:18px; padding:26px 20px; margin-top:14px;
+    display:flex; flex-direction:column; gap:18px; min-height:38vh; justify-content:center; }
+  #gameContent { font-size:1.25rem; line-height:1.5; text-align:center; font-weight:600; white-space:pre-wrap; }
+  #gameContent small { display:block; color:var(--dim); font-size:.8rem; font-weight:400; margin-top:10px; }
+  #wyrOptions { display:flex; flex-direction:column; gap:10px; }
+  #wyrOptions button { background:var(--panel2); border:1.5px solid var(--line); border-radius:14px;
+    padding:16px 14px; color:var(--text); font-size:1.02rem; font-weight:600; line-height:1.35; }
+  #wyrOptions button.picked { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 18%, var(--panel2)); }
+  .orDiv { text-align:center; color:var(--dim); font-size:.75rem; letter-spacing:.2em; }
+  #gameNext { padding:13px; font-size:1rem; }
+
   /* ── meal plan ─────────────────────────────────────────────── */
   .mealRow { display:flex; gap:6px; align-items:center; padding:5px 0 2px; }
   .mealRow .mealDay { min-width:54px; color:var(--dim); font-size:.78rem; text-transform:uppercase; }
@@ -349,6 +368,22 @@
         </div>
       </section>
       <section id="view-messages" class="hidden"><div id="msgList"></div></section>
+      <section id="view-games" class="hidden">
+        <div id="gameModes">
+          <button data-game="fact">🧠<span>Fun Fact</span></button>
+          <button data-game="joke">😂<span>Joke</span></button>
+          <button data-game="wyr">🤔<span>Would You<br>Rather</span></button>
+        </div>
+        <div id="gameCard" class="hidden">
+          <div id="gameContent"></div>
+          <div id="wyrOptions" class="hidden">
+            <button id="wyrA"></button>
+            <div class="orDiv">— OR —</div>
+            <button id="wyrB"></button>
+          </div>
+          <button id="gameNext" class="gold">Another one! 🎲</button>
+        </div>
+      </section>
       <section id="view-sos" class="hidden">
         <div id="sosView">
           <div>
