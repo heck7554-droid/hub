@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign In</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1116">
+<script src="./config.js"></script>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#161b23; --panel2:#1f2733; --text:#e8ecf2; --dim:#8b95a5;
+    --line:#262f3c; --accent:#6b4ee6; --red:#e5484d; --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body { background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif; }
+  button { font:inherit; border:0; cursor:pointer; border-radius:12px; }
+  input, select { font:inherit; background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px; width:100%; }
+  .hidden { display:none !important; }
+
+  /* ── sign in (intentionally unbranded) ─────────────────────── */
+  #signin { min-height:100%; display:grid; place-items:center; padding:24px; }
+  #signin form { width:100%; max-width:340px; display:flex; flex-direction:column; gap:12px; }
+  #signin h1 { font-size:1.6rem; text-align:center; margin-bottom:12px; font-weight:600; }
+  #signin button { background:var(--accent); color:#fff; padding:13px; font-weight:600; }
+  #signinErr { color:var(--red); font-size:.9rem; text-align:center; min-height:1.2em; }
+
+  /* ── app shell ─────────────────────────────────────────────── */
+  #app { min-height:100%; display:flex; flex-direction:column; }
+  header { padding:14px 16px 10px; display:flex; align-items:center; gap:10px;
+    position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:1.15rem; font-weight:700; flex:1; }
+  #whoami { font-size:.85rem; color:var(--dim); }
+  #signout { background:none; color:var(--dim); font-size:.8rem; padding:6px; }
+  main { flex:1; padding:0 14px calc(86px + var(--safe-bottom)); overflow-y:auto; }
+
+  #sosBanner { margin:0 14px 10px; background:linear-gradient(90deg,#7f1d1d,#b91c1c);
+    border-radius:14px; padding:14px; display:flex; align-items:center; gap:12px; }
+  #sosBanner .info { flex:1; } #sosBanner b { display:block; }
+  #sosBanner small { color:#fecaca; }
+  #sosBanner button { background:#fff; color:#991b1b; font-weight:700; padding:10px 14px; }
+
+  #notifBar { margin:0 14px 10px; background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:10px; font-size:.9rem; }
+  #notifBar button { background:var(--accent); color:#fff; padding:8px 12px; font-size:.85rem; }
+  #notifBar .msg { flex:1; color:var(--dim); }
+
+  nav { position:fixed; bottom:0; left:0; right:0; display:flex;
+    background:rgba(22,27,35,.96); backdrop-filter:blur(12px); border-top:1px solid var(--line);
+    padding:8px 6px calc(8px + var(--safe-bottom)); }
+  nav button { flex:1; background:none; color:var(--dim); display:flex; flex-direction:column;
+    align-items:center; gap:3px; font-size:.7rem; padding:6px 0; }
+  nav button .ic { font-size:1.35rem; }
+  nav button.active { color:#b3a4f5; }
+
+  .day-group h2 { font-size:.8rem; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.06em; margin:18px 2px 8px; }
+  .day-group h2.today { color:#b3a4f5; }
+  .ev { background:var(--panel); border-left:4px solid var(--c,var(--accent));
+    border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; gap:12px; align-items:center; }
+  .ev time { color:var(--dim); font-size:.8rem; min-width:60px; font-variant-numeric:tabular-nums; }
+  .ev .name { font-weight:600; font-size:.95rem; }
+  .dots { display:flex; gap:3px; margin-top:3px; }
+  .dots i { width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+  #msgList { display:flex; flex-direction:column; gap:8px; padding-top:12px; }
+  .msg { max-width:82%; background:var(--panel); border-radius:16px 16px 16px 6px; padding:9px 13px; }
+  .msg.mine { align-self:flex-end; background:var(--accent); border-radius:16px 16px 6px 16px; }
+  .msg .from { font-size:.72rem; color:var(--dim); margin-bottom:2px; }
+  .msg.mine .from { color:#d6ccff; }
+  .msg .body { font-size:.95rem; line-height:1.35; }
+  .msg.announce { border:1px solid #7c5cff; background:#241d45; align-self:stretch; max-width:100%; }
+  #composer { position:fixed; bottom:calc(64px + var(--safe-bottom)); left:0; right:0;
+    display:flex; gap:8px; padding:10px 14px; background:var(--bg); }
+  #composer input { flex:1; }
+  #composer button { background:var(--accent); color:#fff; padding:0 18px; font-weight:600; }
+
+  #sosView { display:grid; place-items:center; min-height:60vh; text-align:center; }
+  #sosBtn { width:210px; height:210px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ff6b6b,#c92a2a);
+    color:#fff; font-size:2.6rem; font-weight:800; box-shadow:0 0 0 14px rgba(229,72,77,.15), 0 12px 40px rgba(201,42,42,.5);
+    letter-spacing:.05em; }
+  #sosBtn:active { transform:scale(.96); }
+  #sosView p { color:var(--dim); margin-top:22px; max-width:280px; }
+  #sosStatus { margin-top:16px; font-weight:600; min-height:1.4em; }
+
+  .card { background:var(--panel); border-radius:14px; padding:14px; margin-top:12px; }
+  .card h3 { font-size:.95rem; margin-bottom:10px; }
+  .card form { display:flex; flex-direction:column; gap:8px; }
+  .card form button { background:var(--accent); color:#fff; padding:11px; font-weight:600; }
+  .row { display:flex; gap:8px; }
+  .memberRow { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .memberRow i { width:12px; height:12px; border-radius:50%; }
+  .memberRow .role { margin-left:auto; color:var(--dim); font-size:.8rem; }
+  #pairResult { font-size:1.8rem; letter-spacing:.35em; text-align:center; padding:8px;
+    font-variant-numeric:tabular-nums; color:#b3a4f5; min-height:1.4em; }
+  .note { color:var(--dim); font-size:.8rem; margin-top:8px; line-height:1.4; }
+  #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--panel2);
+    border:1px solid var(--line); padding:10px 18px; border-radius:12px; font-size:.9rem;
+    opacity:0; transition:opacity .25s; pointer-events:none; z-index:50; }
+</style>
+</head>
+<body>
+  <!-- unbranded on purpose: page reveals nothing until a valid login -->
+  <div id="signin">
+    <form id="signinForm">
+      <h1>Sign In</h1>
+      <input id="email" type="text" placeholder="Name or Email" autocomplete="username" required>
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Sign In</button>
+      <div id="signinErr"></div>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <header>
+      <h1 id="familyName">Family Hub</h1>
+      <span id="whoami"></span>
+      <button id="signout">Sign out</button>
+    </header>
+    <div id="sosBanner" class="hidden"></div>
+    <div id="notifBar" class="hidden">
+      <span class="msg" id="notifMsg">Turn on notifications for messages &amp; SOS alerts.</span>
+      <button id="notifBtn">Enable</button>
+    </div>
+    <main>
+      <section id="view-today"></section>
+      <section id="view-messages" class="hidden"><div id="msgList"></div></section>
+      <section id="view-sos" class="hidden">
+        <div id="sosView">
+          <div>
+            <button id="sosBtn">SOS</button>
+            <p>Press if you need Mom or Dad right away. They get an instant alert on their phones.</p>
+            <div id="sosStatus"></div>
+          </div>
+        </div>
+      </section>
+      <section id="view-admin" class="hidden">
+        <div class="card"><h3>Family members</h3><div id="memberList"></div></div>
+        <div class="card"><h3>Add member</h3>
+          <form id="addMemberForm">
+            <input id="amName" placeholder="Name" required>
+            <div class="row">
+              <select id="amRole"><option value="child">Child</option><option value="adult">Adult</option><option value="admin">Parent (admin)</option></select>
+              <input id="amColor" type="color" value="#3FA46A" style="padding:4px;height:46px">
+            </div>
+            <input id="amEmail" type="email" placeholder="Email (adults only — kids don't need one)">
+            <input id="amPassword" type="password" placeholder="Password (optional)">
+            <button type="submit">Add member</button>
+          </form>
+          <div class="note">Kids sign in with just their <b>name</b> + password — no email needed.
+            Leave the password empty too for young kids who only appear on the calendar.</div>
+        </div>
+        <div class="card"><h3>Add a home display (TV / iPad)</h3>
+          <button id="pairBtn" style="background:var(--accent);color:#fff;padding:11px;width:100%">Create pairing code</button>
+          <div id="pairResult"></div>
+          <div class="note">Enter this code on the TV or kiosk screen within 10 minutes.</div>
+        </div>
+      </section>
+    </main>
+    <nav id="tabs"></nav>
+  </div>
+  <div id="toast"></div>
+  <div id="composer" class="hidden">
+    <input id="msgInput" placeholder="Message the family…" autocomplete="off">
+    <button id="msgSend">Send</button>
+  </div>
+
+<script src="./app.js"></script>
+</body>
+</html>
