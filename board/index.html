@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomeSync Family Hub</title>
+<style>
+  :root {
+    --bg: #000000; --panel: #141414; --panel2: #1e1e1e;
+    --text: #f3efe6; --dim: #9b937f; --line: #2b2b28;
+    --accent: #d4af37;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    padding: 2.2vw; display: flex; flex-direction: column; gap: 1.4vw;
+  }
+  /* ── header ─────────────────────────────────────── */
+  header { display: flex; align-items: baseline; justify-content: space-between; }
+  header h1 { font-size: 2.2vw; font-weight: 700; letter-spacing: -.02em; }
+  #clock { font-size: 2.2vw; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+  #members { display: flex; gap: .9vw; }
+  .member { display: flex; align-items: center; gap: .45vw; font-size: 1.05vw; color: var(--dim); }
+  .member i { width: .9vw; height: .9vw; border-radius: 50%; display: inline-block; }
+  /* ── announcement banner ────────────────────────── */
+  #banner {
+    display: none; background: linear-gradient(90deg, #a8862a, #e2c766);
+    color: #0f0c02;
+    border-radius: 1vw; padding: 1.1vw 1.5vw; font-size: 1.5vw; font-weight: 600;
+  }
+  #banner small { display: block; font-size: .95vw; font-weight: 400; opacity: .75; margin-top: .2vw; }
+  /* ── week grid ──────────────────────────────────── */
+  #week { display: grid; grid-template-columns: repeat(7, 1fr); gap: .8vw; flex: 1; }
+  .day { background: var(--panel); border-radius: 1vw; padding: 1vw; display: flex; flex-direction: column; gap: .6vw; min-height: 30vw; }
+  .day.today { outline: .15vw solid var(--accent); background: var(--panel2); }
+  .day h2 { font-size: 1.05vw; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .day.today h2 { color: #e2c766; }
+  .day h2 b { color: var(--text); font-size: 1.3vw; margin-left: .3vw; }
+  .event { background: var(--panel2); border-left: .3vw solid var(--c, var(--accent)); border-radius: .5vw; padding: .55vw .7vw; }
+  .day.today .event { background: #232c3a; }
+  .event .t { font-size: .95vw; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .event .n { font-size: 1.1vw; font-weight: 600; line-height: 1.25; margin-top: .1vw; }
+  .event .dots { margin-top: .3vw; display: flex; gap: .25vw; }
+  .event .dots i { width: .6vw; height: .6vw; border-radius: 50%; display: inline-block; }
+  /* ── pairing overlay ────────────────────────────── */
+  #pairing {
+    position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; text-align: center;
+  }
+  #pairing .card { background: var(--panel); padding: 3vw 4vw; border-radius: 1.5vw; }
+  #pairing h1 { font-size: 2.4vw; margin-bottom: .6vw; }
+  #pairing p { color: var(--dim); font-size: 1.2vw; margin-bottom: 1.6vw; }
+  #code { font-size: 2.6vw; letter-spacing: .6vw; width: 12ch; text-align: center; background: var(--panel2);
+    border: .15vw solid var(--line); color: var(--text); border-radius: .8vw; padding: .8vw; font-variant-numeric: tabular-nums; }
+  #pairBtn { display: block; margin: 1.4vw auto 0; font-size: 1.3vw; background: var(--accent); color: white;
+    border: 0; border-radius: .8vw; padding: .9vw 2.6vw; cursor: pointer; }
+  #pairErr { color: #e66a6a; font-size: 1vw; margin-top: 1vw; min-height: 1.2vw; }
+  footer { color: var(--dim); font-size: .85vw; text-align: right; }
+</style>
+</head>
+<body>
+  <div id="pairing">
+    <div class="card">
+      <h1>🏠 HomeSync</h1>
+      <p>A parent creates a pairing code in the app<br>(Settings → Devices → Add display), then enter it here.</p>
+      <input id="code" maxlength="6" inputmode="numeric" placeholder="000000" autocomplete="off">
+      <button id="pairBtn">Pair this display</button>
+      <div id="pairErr"></div>
+    </div>
+  </div>
+
+  <header style="display:none">
+    <h1>🏠 The Family Hub</h1>
+    <div id="members"></div>
+    <div id="clock"></div>
+  </header>
+  <div id="banner"></div>
+  <main id="week" style="display:none"></main>
+  <footer style="display:none">updates every minute · <span id="updated"></span></footer>
+
+<script>
+const API = localStorage.getItem('homesync_api') || 'https://xbdklcxsvdbesquodzsu.supabase.co/functions/v1/api/api';
+const els = {
+  pairing: document.getElementById('pairing'), code: document.getElementById('code'),
+  pairBtn: document.getElementById('pairBtn'), pairErr: document.getElementById('pairErr'),
+  header: document.querySelector('header'), banner: document.getElementById('banner'),
+  week: document.getElementById('week'), footer: document.querySelector('footer'),
+  members: document.getElementById('members'), clock: document.getElementById('clock'),
+  updated: document.getElementById('updated'),
+};
+
+function token() { return localStorage.getItem('homesync_device_token'); }
+
+async function pair() {
+  els.pairErr.textContent = '';
+  const res = await fetch(`${API}/devices/pair`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: els.code.value.trim() }),
+  }).catch(() => null);
+  if (!res || !res.ok) { els.pairErr.textContent = 'Code not recognized (expired or already used) — mint a new one.'; return; }
+  const { deviceToken } = await res.json();
+  localStorage.setItem('homesync_device_token', deviceToken);
+  boot();
+}
+els.pairBtn.addEventListener('click', pair);
+els.code.addEventListener('keydown', (e) => e.key === 'Enter' && pair());
+
+async function refresh() {
+  const res = await fetch(`${API}/dashboard/snapshot`, { headers: { 'X-Device-Token': token() } }).catch(() => null);
+  if (!res) return; // transient network issue: keep showing last data
+  if (res.status === 401) { localStorage.removeItem('homesync_device_token'); return boot(); }
+  render(await res.json());
+}
+
+function render({ events, announcements, members }) {
+  const colorOf = Object.fromEntries(members.map((m) => [m.id, m.color]));
+  els.members.innerHTML = members.map((m) =>
+    `<span class="member"><i style="background:${m.color}"></i>${m.displayName}</span>`).join('');
+
+  const a = announcements[0];
+  els.banner.style.display = a ? 'block' : 'none';
+  if (a) els.banner.innerHTML = `📣 ${esc(a.body)}<small>— ${esc(a.author ?? 'a parent')}</small>`;
+
+  const days = [...Array(7)].map((_, i) => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + i); return d; });
+  els.week.innerHTML = days.map((day, i) => {
+    const next = new Date(day); next.setDate(day.getDate() + 1);
+    const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    const todays = events.filter((e) => {
+      // all-day events live at UTC midnight — compare by calendar date, not instant
+      if (e.isAllDay) return e.startsAt.slice(0, 10) <= dayKey && dayKey < e.endsAt.slice(0, 10);
+      const s = new Date(e.startsAt), en = new Date(e.endsAt);
+      return s < next && en > day;
+    });
+    todays.sort((x, y) => x.startsAt.localeCompare(y.startsAt));
+    return `<section class="day${i === 0 ? ' today' : ''}">
+      <h2>${day.toLocaleDateString(undefined, { weekday: 'short' })}<b>${day.getDate()}</b></h2>
+      ${todays.map((e) => `
+        <div class="event" style="--c:${e.color ?? '#d4af37'}">
+          <div class="t">${e.isAllDay ? 'all day' : fmtTime(e.startsAt)}</div>
+          <div class="n">${esc(e.title)}</div>
+          ${(e.memberIds ?? []).length ? `<div class="dots">${e.memberIds.map((id) =>
+            `<i style="background:${colorOf[id] ?? '#666'}"></i>`).join('')}</div>` : ''}
+        </div>`).join('')}
+    </section>`;
+  }).join('');
+  els.updated.textContent = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function tickClock() {
+  els.clock.textContent = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function boot() {
+  const paired = !!token();
+  els.pairing.style.display = paired ? 'none' : 'grid';
+  for (const el of [els.header, els.week, els.footer]) el.style.display = paired ? '' : 'none';
+  if (paired) { refresh(); tickClock(); }
+}
+setInterval(refresh, 60_000);
+setInterval(tickClock, 10_000);
+boot();
+</script>
+</body>
+</html>

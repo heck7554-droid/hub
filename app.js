@@ -216,6 +216,7 @@ function showSaver(forceNight = null) {
   saver.active = true;
   saver.shownAt = Date.now();
   saver.forceNight = forceNight;
+  saverMouse = null;
   $('saver').classList.remove('hidden');
   applySaverMode();
   syncWakeLock();
@@ -233,11 +234,16 @@ function showSaver(forceNight = null) {
   tickSaverClock();
 }
 
+/** Wake requests from user input — filtered so the screensaver doesn't
+ *  vanish from the click that started it or an accidental mouse nudge. */
+function requestWake() {
+  if (!saver.active) return;
+  if (Date.now() - saver.shownAt < 2500) return; // grace after starting
+  hideSaver();
+}
+
 function hideSaver() {
   if (!saver.active) return;
-  // grace period: the tap/mouse-jiggle that STARTED sleep mode must not
-  // immediately wake it back up
-  if (Date.now() - saver.shownAt < 1500) return;
   saver.active = false;
   saver.forceNight = null;
   $('saver').classList.add('hidden');
@@ -285,17 +291,26 @@ function tickSaverClock() {
     <small>${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</small>`;
 }
 
-// idle detection: any interaction resets the 30-minute clock
+// idle detection: any interaction resets the 30-minute clock.
+// Taps/keys wake the screensaver immediately (after the start grace);
+// mouse movement only wakes it after ~60px of deliberate motion, so a
+// desk bump or mouse drift doesn't kill it.
 for (const evt of ['pointerdown', 'keydown', 'touchstart', 'wheel']) {
   addEventListener(evt, () => {
     lastActivity = Date.now();
-    hideSaver();
+    requestWake();
   }, { passive: true });
 }
 let lastMouse = 0;
-addEventListener('mousemove', () => {
+let saverMouse = null; // movement accumulator while the saver is up
+addEventListener('mousemove', (e) => {
   const now = Date.now();
-  if (now - lastMouse > 1000) { lastMouse = now; lastActivity = now; hideSaver(); }
+  if (now - lastMouse > 1000) { lastMouse = now; lastActivity = now; }
+  if (!saver.active) { saverMouse = null; return; }
+  if (!saverMouse) { saverMouse = { x: e.clientX, y: e.clientY, dist: 0 }; return; }
+  saverMouse.dist += Math.hypot(e.clientX - saverMouse.x, e.clientY - saverMouse.y);
+  saverMouse.x = e.clientX; saverMouse.y = e.clientY;
+  if (saverMouse.dist > 60) requestWake();
 }, { passive: true });
 
 setInterval(() => {
@@ -303,7 +318,9 @@ setInterval(() => {
 }, 30_000);
 
 // manual sleep: start the screensaver on demand (sun/moon follows the clock)
-$('sleepBtn').addEventListener('click', () => showSaver());
+$('sleepBtn').addEventListener('click', () => {
+  try { showSaver(); } catch (err) { toast(`Screensaver failed: ${err.message}`); }
+});
 
 // manual/testing hook: window.hubSaver.show(true) previews night mode
 window.hubSaver = { show: showSaver, hide: hideSaver };
@@ -811,6 +828,7 @@ async function pollSos() {
 
 async function loadAdmin() {
   loadCalendars();
+  loadDevices();
   $('memberList').innerHTML = state.members.map((m) => {
     const login = m.email ? esc(m.email)
       : m.authUserId ? `signs in as “${esc(m.displayName.toLowerCase())}”` : 'no login';
@@ -894,6 +912,26 @@ $('addMemberForm').addEventListener('submit', async (e) => {
       : `${member.displayName} added ✓`);
   } catch (err) { toast(err.message); }
 });
+
+async function loadDevices() {
+  const { devices } = await apiFetch('/devices');
+  const displays = devices.filter((d) => d.isDisplayOnly && !d.revokedAt);
+  $('deviceList').innerHTML = displays.map((d) => {
+    const seen = d.lastSeenAt
+      ? `seen ${new Date(d.lastSeenAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+      : 'never used';
+    return `<div class="memberRow"><i style="background:var(--accent)"></i>${esc(d.name)}
+      <span class="role">${d.kind === 'apple_tv' ? 'TV' : 'iPad'} · ${seen}
+      <button data-dev="${d.id}" style="background:none;color:var(--red);padding:2px 8px">Revoke</button></span></div>`;
+  }).join('') || '<div class="allDone">No displays paired yet.</div>';
+  $('deviceList').querySelectorAll('button[data-dev]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('Revoke this display? It signs out immediately and must be re-paired.')) return;
+      await apiFetch(`/devices/${b.dataset.dev}`, { method: 'DELETE' });
+      loadDevices();
+      toast('Display revoked ✓');
+    }));
+}
 
 $('pairBtn').addEventListener('click', async () => {
   const { code } = await apiFetch('/devices/pairing-code', {
