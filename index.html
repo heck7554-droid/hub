@@ -156,6 +156,22 @@
           <div class="note">Kids sign in with just their <b>name</b> + password — no email needed.
             Leave the password empty too for young kids who only appear on the calendar.</div>
         </div>
+        <div class="card"><h3>Calendar links</h3>
+          <div id="calList"></div>
+          <form id="addCalForm">
+            <input id="acUrl" type="url" placeholder="Paste iCal / ICS link (https:// or webcal://)" required>
+            <div class="row">
+              <input id="acName" placeholder="Name (optional)">
+              <input id="acColor" type="color" value="#2E6FD1" style="padding:4px;height:46px;max-width:70px">
+            </div>
+            <button type="submit">Add calendar</button>
+          </form>
+          <div class="note">Where to find these links:<br>
+            • <b>Google Calendar</b> (on a computer): Settings → your calendar → Integrate calendar → <i>Secret address in iCal format</i>.<br>
+            • <b>iPhone/iCloud</b>: Calendar app → Calendars → tap <b>ⓘ</b> next to a calendar → turn on <i>Public Calendar</i> → Share Link.<br>
+            • <b>School / sports sites</b>: look for a “Subscribe”, “iCal”, or “Add to calendar” link.<br>
+            Events refresh automatically every few minutes (view-only).</div>
+        </div>
         <div class="card"><h3>Add a home display (TV / iPad)</h3>
           <button id="pairBtn" style="background:var(--accent);color:#fff;padding:11px;width:100%">Create pairing code</button>
           <div id="pairResult"></div>

@@ -246,6 +246,7 @@ async function pollSos() {
 // ----------------------------------------------------------------
 
 async function loadAdmin() {
+  loadCalendars();
   $('memberList').innerHTML = state.members.map((m) => {
     const login = m.email ? esc(m.email)
       : m.authUserId ? `signs in as “${esc(m.displayName.toLowerCase())}”` : 'no login';
@@ -274,6 +275,40 @@ $('addMemberForm').addEventListener('submit', async (e) => {
       ? `${member.displayName} added — signs in as “${signInName}” ✓`
       : `${member.displayName} added ✓`);
   } catch (err) { toast(err.message); }
+});
+
+async function loadCalendars() {
+  const { calendars } = await apiFetch('/calendars');
+  $('calList').innerHTML = calendars.map((cal) => `
+    <div class="memberRow"><i style="background:${cal.color ?? '#666'}"></i>${esc(cal.name)}
+      <span class="role">${cal.provider === 'ics' ? 'link' : cal.provider}${cal.access === 'read_only' ? ' · view-only' : ''}
+      ${cal.provider === 'ics' ? `<button data-cal="${cal.id}" style="background:none;color:var(--red);padding:2px 6px">✕</button>` : ''}</span></div>`).join('');
+  $('calList').querySelectorAll('button[data-cal]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('Remove this calendar and its events from the hub?')) return;
+      await apiFetch(`/calendars/${b.dataset.cal}`, { method: 'DELETE' });
+      loadCalendars();
+    }));
+}
+
+$('addCalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Checking link…';
+  try {
+    const { imported } = await apiFetch('/calendars/from-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: $('acUrl').value.trim(),
+        name: $('acName').value.trim() || undefined,
+        color: $('acColor').value,
+      }),
+    });
+    e.target.reset();
+    loadCalendars();
+    toast(`Calendar added — ${imported} events imported ✓`);
+  } catch (err) { toast(err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Add calendar'; }
 });
 
 $('pairBtn').addEventListener('click', async () => {
