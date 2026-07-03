@@ -1,6 +1,6 @@
 // Per-environment configuration — currently set to PRODUCTION
 // (project family-hub / xbdklcxsvdbesquodzsu). Upload pwa/ as-is to GoDaddy.
-// For local development, change SUPABASE_URL to http://127.0.0.1:54321 and
+// For local development, change SUPABASE_URL to https://xbdklcxsvdbesquodzsu.supabase.co and
 // ANON_KEY to the local key from `supabase status`.
 window.HUB_CONFIG = {
   SUPABASE_URL: 'https://xbdklcxsvdbesquodzsu.supabase.co',

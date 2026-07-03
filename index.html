@@ -8,12 +8,14 @@
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0e1116">
+<meta name="theme-color" content="#000000">
 <script src="./config.js"></script>
 <style>
   :root {
-    --bg:#0e1116; --panel:#161b23; --panel2:#1f2733; --text:#e8ecf2; --dim:#8b95a5;
-    --line:#262f3c; --accent:#6b4ee6; --red:#e5484d; --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --bg:#000000; --panel:#141414; --panel2:#1e1e1e; --text:#f3efe6; --dim:#9b937f;
+    --line:#2b2b28; --accent:#d4af37; --accent-dark:#0f0c02; --red:#e5484d;
+    --gold-grad:linear-gradient(90deg,#a8862a,#e2c766);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -22,23 +24,26 @@
   button { font:inherit; border:0; cursor:pointer; border-radius:12px; }
   input, select { font:inherit; background:var(--panel2); color:var(--text);
     border:1px solid var(--line); border-radius:10px; padding:12px 14px; width:100%; }
+  input[type=time], input[type=date] { color-scheme:dark; }
   .hidden { display:none !important; }
+  .gold { background:var(--gold-grad); color:var(--accent-dark); font-weight:700; }
 
   /* ── sign in (intentionally unbranded) ─────────────────────── */
   #signin { min-height:100%; display:grid; place-items:center; padding:24px; }
   #signin form { width:100%; max-width:340px; display:flex; flex-direction:column; gap:12px; }
   #signin h1 { font-size:1.6rem; text-align:center; margin-bottom:12px; font-weight:600; }
-  #signin button { background:var(--accent); color:#fff; padding:13px; font-weight:600; }
+  #signin button { padding:13px; }
   #signinErr { color:var(--red); font-size:.9rem; text-align:center; min-height:1.2em; }
 
   /* ── app shell ─────────────────────────────────────────────── */
   #app { min-height:100%; display:flex; flex-direction:column; }
-  header { padding:14px 16px 10px; display:flex; align-items:center; gap:10px;
+  header { padding:14px 16px 8px; display:flex; align-items:center; gap:10px;
     position:sticky; top:0; background:var(--bg); z-index:5; }
-  header h1 { font-size:1.15rem; font-weight:700; flex:1; }
+  header h1 { font-size:1.15rem; font-weight:700; flex:1; color:var(--accent); }
   #whoami { font-size:.85rem; color:var(--dim); }
   #signout { background:none; color:var(--dim); font-size:.8rem; padding:6px; }
-  main { flex:1; padding:0 14px calc(86px + var(--safe-bottom)); overflow-y:auto; }
+  main { flex:1; padding:0 0 calc(86px + var(--safe-bottom)); overflow-y:auto; }
+  main > section { padding:0 14px; }
 
   #sosBanner { margin:0 14px 10px; background:linear-gradient(90deg,#7f1d1d,#b91c1c);
     border-radius:14px; padding:14px; display:flex; align-items:center; gap:12px; }
@@ -48,39 +53,83 @@
 
   #notifBar { margin:0 14px 10px; background:var(--panel); border:1px solid var(--line);
     border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:10px; font-size:.9rem; }
-  #notifBar button { background:var(--accent); color:#fff; padding:8px 12px; font-size:.85rem; }
+  #notifBar button { padding:8px 12px; font-size:.85rem; }
   #notifBar .msg { flex:1; color:var(--dim); }
 
   nav { position:fixed; bottom:0; left:0; right:0; display:flex;
-    background:rgba(22,27,35,.96); backdrop-filter:blur(12px); border-top:1px solid var(--line);
-    padding:8px 6px calc(8px + var(--safe-bottom)); }
+    background:rgba(12,12,12,.97); backdrop-filter:blur(12px); border-top:1px solid var(--line);
+    padding:8px 6px calc(8px + var(--safe-bottom)); z-index:20; }
   nav button { flex:1; background:none; color:var(--dim); display:flex; flex-direction:column;
     align-items:center; gap:3px; font-size:.7rem; padding:6px 0; }
   nav button .ic { font-size:1.35rem; }
-  nav button.active { color:#b3a4f5; }
+  nav button.active { color:var(--accent); }
 
-  .day-group h2 { font-size:.8rem; color:var(--dim); text-transform:uppercase;
-    letter-spacing:.06em; margin:18px 2px 8px; }
-  .day-group h2.today { color:#b3a4f5; }
-  .ev { background:var(--panel); border-left:4px solid var(--c,var(--accent));
-    border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; gap:12px; align-items:center; }
-  .ev time { color:var(--dim); font-size:.8rem; min-width:60px; font-variant-numeric:tabular-nums; }
-  .ev .name { font-weight:600; font-size:.95rem; }
-  .dots { display:flex; gap:3px; margin-top:3px; }
-  .dots i { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  /* ── day view (time grid) ──────────────────────────────────── */
+  #dayStrip { display:flex; gap:4px; overflow-x:auto; padding:4px 14px 10px; scrollbar-width:none; }
+  #dayStrip::-webkit-scrollbar { display:none; }
+  .dayPill { min-width:46px; padding:7px 0 8px; border-radius:14px; background:none;
+    color:var(--dim); display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .dayPill small { font-size:.65rem; letter-spacing:.05em; }
+  .dayPill b { font-size:1.05rem; color:var(--text); }
+  .dayPill.sel { background:var(--gold-grad); }
+  .dayPill.sel small, .dayPill.sel b { color:var(--accent-dark); }
+  #dayTitle { font-weight:700; text-align:center; padding:2px 0 8px; font-size:.95rem; }
 
+  #allDayRow { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 8px; }
+  #allDayRow .chip { background:var(--panel2); border-left:3px solid var(--c,var(--accent));
+    border-radius:8px; padding:5px 10px; font-size:.8rem; font-weight:600; }
+
+  #gridWrap { position:relative; margin:0 10px 0 0; }
+  #timeGrid { position:relative; margin-left:56px; border-left:1px solid var(--line); }
+  .hourLine { position:absolute; left:0; right:0; border-top:1px solid var(--line); }
+  .hourLabel { position:absolute; left:-56px; width:50px; text-align:right; font-size:.7rem;
+    color:var(--dim); transform:translateY(-50%); }
+  .nowLine { position:absolute; left:-4px; right:0; border-top:2px solid var(--red); z-index:3; }
+  .nowLine::before { content:''; position:absolute; left:-5px; top:-5px; width:8px; height:8px;
+    border-radius:50%; background:var(--red); }
+  .gridEv { position:absolute; border-radius:9px; padding:5px 8px; overflow:hidden;
+    background:color-mix(in srgb, var(--c, var(--accent)) 16%, var(--panel));
+    border-left:3px solid var(--c,var(--accent)); z-index:2; }
+  .gridEv .t { font-size:.68rem; color:var(--dim); }
+  .gridEv .n { font-size:.8rem; font-weight:650; line-height:1.2;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .gridEv .dots { display:flex; gap:3px; margin-top:2px; }
+  .gridEv .dots i { width:6px; height:6px; border-radius:50%; display:inline-block; }
+
+  #addEventBtn { position:fixed; right:18px; bottom:calc(82px + var(--safe-bottom));
+    width:58px; height:58px; border-radius:50%; font-size:2rem; z-index:20;
+    box-shadow:0 8px 24px rgba(212,175,55,.35); }
+
+  /* ── event composer sheet ──────────────────────────────────── */
+  #eventModal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:30;
+    display:grid; align-items:end; }
+  #eventModal .sheet { background:var(--panel); border-radius:20px 20px 0 0; padding:18px 16px
+    calc(18px + var(--safe-bottom)); display:flex; flex-direction:column; gap:10px;
+    max-height:88vh; overflow-y:auto; }
+  #eventModal h3 { font-size:1.05rem; color:var(--accent); }
+  #eventModal .row { display:flex; gap:8px; }
+  #eventModal label { font-size:.75rem; color:var(--dim); display:block; margin:2px 0 4px; }
+  #memberChips { display:flex; flex-wrap:wrap; gap:6px; }
+  #memberChips button { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
+    padding:7px 12px; border-radius:20px; font-size:.85rem; }
+  #memberChips button.on { border-color:var(--c); color:var(--text);
+    background:color-mix(in srgb, var(--c) 22%, var(--panel2)); }
+  #evSave { padding:13px; }
+  #evCancel { background:none; color:var(--dim); padding:8px; }
+
+  /* ── messages ──────────────────────────────────────────────── */
   #msgList { display:flex; flex-direction:column; gap:8px; padding-top:12px; }
   .msg { max-width:82%; background:var(--panel); border-radius:16px 16px 16px 6px; padding:9px 13px; }
-  .msg.mine { align-self:flex-end; background:var(--accent); border-radius:16px 16px 6px 16px; }
+  .msg.mine { align-self:flex-end; background:#4a3f1c; border-radius:16px 16px 6px 16px; }
   .msg .from { font-size:.72rem; color:var(--dim); margin-bottom:2px; }
-  .msg.mine .from { color:#d6ccff; }
   .msg .body { font-size:.95rem; line-height:1.35; }
-  .msg.announce { border:1px solid #7c5cff; background:#241d45; align-self:stretch; max-width:100%; }
+  .msg.announce { border:1px solid var(--accent); background:#2a2310; align-self:stretch; max-width:100%; }
   #composer { position:fixed; bottom:calc(64px + var(--safe-bottom)); left:0; right:0;
-    display:flex; gap:8px; padding:10px 14px; background:var(--bg); }
+    display:flex; gap:8px; padding:10px 14px; background:var(--bg); z-index:15; }
   #composer input { flex:1; }
-  #composer button { background:var(--accent); color:#fff; padding:0 18px; font-weight:600; }
+  #composer button { padding:0 18px; }
 
+  /* ── SOS ───────────────────────────────────────────────────── */
   #sosView { display:grid; place-items:center; min-height:60vh; text-align:center; }
   #sosBtn { width:210px; height:210px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ff6b6b,#c92a2a);
     color:#fff; font-size:2.6rem; font-weight:800; box-shadow:0 0 0 14px rgba(229,72,77,.15), 0 12px 40px rgba(201,42,42,.5);
@@ -89,20 +138,21 @@
   #sosView p { color:var(--dim); margin-top:22px; max-width:280px; }
   #sosStatus { margin-top:16px; font-weight:600; min-height:1.4em; }
 
+  /* ── admin ─────────────────────────────────────────────────── */
   .card { background:var(--panel); border-radius:14px; padding:14px; margin-top:12px; }
-  .card h3 { font-size:.95rem; margin-bottom:10px; }
+  .card h3 { font-size:.95rem; margin-bottom:10px; color:var(--accent); }
   .card form { display:flex; flex-direction:column; gap:8px; }
-  .card form button { background:var(--accent); color:#fff; padding:11px; font-weight:600; }
+  .card form button[type=submit] { padding:11px; }
   .row { display:flex; gap:8px; }
   .memberRow { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
   .memberRow i { width:12px; height:12px; border-radius:50%; }
   .memberRow .role { margin-left:auto; color:var(--dim); font-size:.8rem; }
   #pairResult { font-size:1.8rem; letter-spacing:.35em; text-align:center; padding:8px;
-    font-variant-numeric:tabular-nums; color:#b3a4f5; min-height:1.4em; }
-  .note { color:var(--dim); font-size:.8rem; margin-top:8px; line-height:1.4; }
+    font-variant-numeric:tabular-nums; color:var(--accent); min-height:1.4em; }
+  .note { color:var(--dim); font-size:.8rem; margin-top:8px; line-height:1.45; }
   #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--panel2);
-    border:1px solid var(--line); padding:10px 18px; border-radius:12px; font-size:.9rem;
-    opacity:0; transition:opacity .25s; pointer-events:none; z-index:50; }
+    border:1px solid var(--accent); padding:10px 18px; border-radius:12px; font-size:.9rem;
+    opacity:0; transition:opacity .25s; pointer-events:none; z-index:50; max-width:86vw; }
 </style>
 </head>
 <body>
@@ -112,7 +162,7 @@
       <h1>Sign In</h1>
       <input id="email" type="text" placeholder="Name or Email" autocomplete="username" required>
       <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
-      <button type="submit">Sign In</button>
+      <button type="submit" class="gold">Sign In</button>
       <div id="signinErr"></div>
     </form>
   </div>
@@ -126,16 +176,21 @@
     <div id="sosBanner" class="hidden"></div>
     <div id="notifBar" class="hidden">
       <span class="msg" id="notifMsg">Turn on notifications for messages &amp; SOS alerts.</span>
-      <button id="notifBtn">Enable</button>
+      <button id="notifBtn" class="gold">Enable</button>
     </div>
     <main>
-      <section id="view-today"></section>
+      <section id="view-today" style="padding:0">
+        <div id="dayStrip"></div>
+        <div id="dayTitle"></div>
+        <div id="allDayRow"></div>
+        <div id="gridWrap"><div id="timeGrid"></div></div>
+      </section>
       <section id="view-messages" class="hidden"><div id="msgList"></div></section>
       <section id="view-sos" class="hidden">
         <div id="sosView">
           <div>
             <button id="sosBtn">SOS</button>
-            <p>Press if you need Mom or Dad right away. They get an instant alert on their phones.</p>
+            <p id="sosHint">Press if you need the family right away — parents get an instant alert on their phones.</p>
             <div id="sosStatus"></div>
           </div>
         </div>
@@ -147,11 +202,11 @@
             <input id="amName" placeholder="Name" required>
             <div class="row">
               <select id="amRole"><option value="child">Child</option><option value="adult">Adult</option><option value="admin">Parent (admin)</option></select>
-              <input id="amColor" type="color" value="#3FA46A" style="padding:4px;height:46px">
+              <input id="amColor" type="color" value="#d4af37" style="padding:4px;height:46px">
             </div>
             <input id="amEmail" type="email" placeholder="Email (adults only — kids don't need one)">
             <input id="amPassword" type="password" placeholder="Password (optional)">
-            <button type="submit">Add member</button>
+            <button type="submit" class="gold">Add member</button>
           </form>
           <div class="note">Kids sign in with just their <b>name</b> + password — no email needed.
             Leave the password empty too for young kids who only appear on the calendar.</div>
@@ -162,9 +217,9 @@
             <input id="acUrl" type="url" placeholder="Paste iCal / ICS link (https:// or webcal://)" required>
             <div class="row">
               <input id="acName" placeholder="Name (optional)">
-              <input id="acColor" type="color" value="#2E6FD1" style="padding:4px;height:46px;max-width:70px">
+              <input id="acColor" type="color" value="#d4af37" style="padding:4px;height:46px;max-width:70px">
             </div>
-            <button type="submit">Add calendar</button>
+            <button type="submit" class="gold">Add calendar</button>
           </form>
           <div class="note">Where to find these links:<br>
             • <b>Google Calendar</b> (on a computer): Settings → your calendar → Integrate calendar → <i>Secret address in iCal format</i>.<br>
@@ -173,18 +228,47 @@
             Events refresh automatically every few minutes (view-only).</div>
         </div>
         <div class="card"><h3>Add a home display (TV / iPad)</h3>
-          <button id="pairBtn" style="background:var(--accent);color:#fff;padding:11px;width:100%">Create pairing code</button>
+          <button id="pairBtn" class="gold" style="padding:11px;width:100%">Create pairing code</button>
           <div id="pairResult"></div>
           <div class="note">Enter this code on the TV or kiosk screen within 10 minutes.</div>
         </div>
       </section>
     </main>
+    <button id="addEventBtn" class="gold hidden">＋</button>
     <nav id="tabs"></nav>
   </div>
+
+  <!-- event composer -->
+  <div id="eventModal" class="hidden">
+    <form class="sheet" id="eventForm">
+      <h3>New event</h3>
+      <input id="evTitle" placeholder="Title" required>
+      <div><label>Date</label><input id="evDate" type="date" required></div>
+      <div class="row">
+        <div style="flex:1"><label>Starts</label><input id="evStart" type="time" value="17:00" required></div>
+        <div style="flex:1"><label>Ends</label><input id="evEnd" type="time" value="18:00" required></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>Repeat</label>
+          <select id="evRepeat">
+            <option value="">Does not repeat</option>
+            <option value="FREQ=WEEKLY">Every week</option>
+            <option value="FREQ=MONTHLY">Every month</option>
+            <option value="FREQ=YEARLY">Every year</option>
+          </select></div>
+        <div style="flex:1"><label>All day</label>
+          <select id="evAllDay"><option value="">No</option><option value="1">Yes</option></select></div>
+      </div>
+      <div><label>Who is this for?</label><div id="memberChips"></div></div>
+      <button type="submit" id="evSave" class="gold">Add to family calendar</button>
+      <button type="button" id="evCancel">Cancel</button>
+    </form>
+  </div>
+
   <div id="toast"></div>
   <div id="composer" class="hidden">
     <input id="msgInput" placeholder="Message the family…" autocomplete="off">
-    <button id="msgSend">Send</button>
+    <button id="msgSend" class="gold">Send</button>
   </div>
 
 <script src="./app.js"></script>
