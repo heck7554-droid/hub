@@ -99,6 +99,7 @@ async function boot() {
     updateNotifBar();
     pollSos();
     setInterval(pollSos, 20_000);
+    syncWakeLock(); // big screens: hold the display awake from sign-in
   } catch (err) {
     if (err.message !== 'signed out') showSignin();
   }
@@ -142,18 +143,39 @@ function switchTab(tab) {
 }
 
 // ----------------------------------------------------------------
+// Wake lock — keep TVs/computers from sleeping while the hub runs.
+// Held whenever: TV mode is on, the screensaver is up, or the app is
+// on a big screen. Re-acquired when the tab becomes visible again.
+// ----------------------------------------------------------------
+
+let wakeLock = null;
+const isBigScreen = () => matchMedia('(min-width: 900px)').matches;
+
+async function syncWakeLock() {
+  const want = document.body.classList.contains('tv') || saver.active || isBigScreen();
+  if (want && !wakeLock && document.visibilityState === 'visible') {
+    try {
+      wakeLock = await navigator.wakeLock?.request('screen');
+      wakeLock?.addEventListener('release', () => { wakeLock = null; });
+    } catch { /* not supported / power settings deny — screensaver motion still helps */ }
+  } else if (!want && wakeLock) {
+    wakeLock.release().catch(() => {}); wakeLock = null;
+  }
+}
+document.addEventListener('visibilitychange', syncWakeLock);
+
+// ----------------------------------------------------------------
 // TV / big-screen mode: fullscreen, larger type, auto-refresh
 // ----------------------------------------------------------------
 
 let tvTimer = null;
-let wakeLock = null;
 
 async function enterTv() {
   document.body.classList.add('tv');
   $('exitTv').classList.remove('hidden');
   switchTab('today');
   try { await document.documentElement.requestFullscreen?.(); } catch { /* iOS Safari: no API, zoom still applies */ }
-  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* optional */ }
+  syncWakeLock();
   tvTimer = setInterval(() => {
     // follow the real day across midnight, then re-render fresh data
     state.selectedDay = startOfDay(new Date());
@@ -165,9 +187,119 @@ function exitTv() {
   document.body.classList.remove('tv');
   $('exitTv').classList.add('hidden');
   clearInterval(tvTimer); tvTimer = null;
-  wakeLock?.release().catch(() => {}); wakeLock = null;
+  syncWakeLock();
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
+
+// ----------------------------------------------------------------
+// Screensaver — after 30 min idle: a sun arcs across the screen;
+// from 9pm (to 6am) night mode swaps in a moon over a starfield.
+// One full horizon-to-horizon arc every 15 minutes. The motion
+// prevents burn-in; the wake lock prevents sleep.
+// ----------------------------------------------------------------
+
+const IDLE_MS = 30 * 60_000;      // screensaver after 30 minutes
+const ARC_MS = 15 * 60_000;       // one arc pass every 15 minutes
+const NIGHT_START = 21, NIGHT_END = 6; // 9pm → 6am
+
+const saver = { active: false, raf: null, clockTimer: null, forceNight: null };
+let lastActivity = Date.now();
+
+const isNightNow = () => {
+  if (saver.forceNight !== null) return saver.forceNight;
+  const h = new Date().getHours();
+  return h >= NIGHT_START || h < NIGHT_END;
+};
+
+function showSaver(forceNight = null) {
+  if (saver.active) return;
+  saver.active = true;
+  saver.forceNight = forceNight;
+  $('saver').classList.remove('hidden');
+  applySaverMode();
+  syncWakeLock();
+  const animate = () => {
+    if (!saver.active) return;
+    positionCelestial();
+    saver.raf = requestAnimationFrame(animate);
+  };
+  animate();
+  saver.clockTimer = setInterval(() => {
+    tickSaverClock();
+    applySaverMode();      // flips sun→moon live at 9pm
+    positionCelestial();   // guarantees motion even if rAF is throttled
+  }, 1000);
+  tickSaverClock();
+}
+
+function hideSaver() {
+  if (!saver.active) return;
+  saver.active = false;
+  saver.forceNight = null;
+  $('saver').classList.add('hidden');
+  cancelAnimationFrame(saver.raf);
+  clearInterval(saver.clockTimer);
+  syncWakeLock();
+  renderDayView(true); // fresh data when the family comes back
+}
+
+function applySaverMode() {
+  const night = isNightNow();
+  $('saver').classList.toggle('night', night);
+  $('celestial').className = night ? 'moon' : 'sun';
+  const wantStars = night ? 60 : 0;
+  const stars = $('saver').querySelectorAll('.star');
+  if (stars.length !== wantStars) {
+    stars.forEach((s) => s.remove());
+    for (let i = 0; i < wantStars; i++) {
+      const s = document.createElement('div');
+      s.className = 'star';
+      s.style.left = `${Math.random() * 100}%`;
+      s.style.top = `${Math.random() * 70}%`;
+      s.style.animationDelay = `${Math.random() * 4}s`;
+      $('saver').appendChild(s);
+    }
+  }
+}
+
+/** Sun/moon position: horizon → zenith → horizon, one pass per 15 min. */
+function positionCelestial() {
+  const t = (Date.now() % ARC_MS) / ARC_MS;         // 0 → 1 across the pass
+  const el = $('celestial');
+  const size = el.offsetWidth;
+  const w = innerWidth + size * 2;
+  const x = t * w - size;                            // enters left, exits right
+  const horizon = innerHeight * 0.91;                // matches #saverHorizon
+  const peak = innerHeight * 0.62;                   // arc height
+  const y = horizon - Math.sin(t * Math.PI) * peak - size;
+  el.style.transform = `translate(${x - size}px, ${y}px)`;
+}
+
+function tickSaverClock() {
+  const now = new Date();
+  $('saverClock').innerHTML = `${now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+    <small>${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</small>`;
+}
+
+// idle detection: any interaction resets the 30-minute clock
+for (const evt of ['pointerdown', 'keydown', 'touchstart', 'wheel']) {
+  addEventListener(evt, () => {
+    lastActivity = Date.now();
+    hideSaver();
+  }, { passive: true });
+}
+let lastMouse = 0;
+addEventListener('mousemove', () => {
+  const now = Date.now();
+  if (now - lastMouse > 1000) { lastMouse = now; lastActivity = now; hideSaver(); }
+}, { passive: true });
+
+setInterval(() => {
+  if (!saver.active && session.access && Date.now() - lastActivity >= IDLE_MS) showSaver();
+}, 30_000);
+
+// manual/testing hook: window.hubSaver.show(true) previews night mode
+window.hubSaver = { show: showSaver, hide: hideSaver };
 
 $('tvBtn').addEventListener('click', enterTv);
 $('exitTv').addEventListener('click', exitTv);

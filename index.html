@@ -213,6 +213,27 @@
   #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--panel2);
     border:1px solid var(--accent); padding:10px 18px; border-radius:12px; font-size:.9rem;
     opacity:0; transition:opacity .25s; pointer-events:none; z-index:50; max-width:86vw; }
+
+  /* ── screensaver: sun by day, moon after 9pm ───────────────── */
+  #saver { position:fixed; inset:0; z-index:100; overflow:hidden; cursor:none;
+    background:linear-gradient(#05070d 0%, #0d0f08 78%, #14100a 100%); }
+  #saver.night { background:linear-gradient(#010208 0%, #04060f 80%, #070b16 100%); }
+  #celestial { position:absolute; width:11vmin; height:11vmin; border-radius:50%; will-change:transform; }
+  #saver .sun { background:radial-gradient(circle at 38% 34%, #ffe9a8, #f5c542 55%, #d4941e);
+    box-shadow:0 0 8vmin 3vmin rgba(245,197,66,.45), 0 0 20vmin 8vmin rgba(245,197,66,.14); }
+  #saver .moon { background:radial-gradient(circle at 40% 36%, #f4f2ec, #cfd2d8 60%, #9aa0ad);
+    box-shadow:0 0 6vmin 2vmin rgba(220,225,240,.28), inset -2.2vmin -1.4vmin 0 0 rgba(90,98,120,.45); }
+  #saver .star { position:absolute; width:2px; height:2px; border-radius:50%; background:#e8ecf5;
+    animation:twinkle 4s ease-in-out infinite; }
+  @keyframes twinkle { 0%,100% { opacity:.15 } 50% { opacity:.85 } }
+  #saverClock { position:absolute; left:50%; bottom:12vh; transform:translateX(-50%);
+    font-size:9vmin; font-weight:200; letter-spacing:.04em; color:rgba(243,239,230,.85);
+    font-variant-numeric:tabular-nums; text-align:center; }
+  #saverClock small { display:block; font-size:2.4vmin; color:rgba(155,147,127,.9);
+    letter-spacing:.18em; text-transform:uppercase; margin-top:1vh; }
+  #saver.night #saverClock { color:rgba(210,216,232,.72); }
+  #saverHorizon { position:absolute; left:0; right:0; bottom:9vh; border-top:1px solid rgba(212,175,55,.18); }
+  #saver.night #saverHorizon { border-top-color:rgba(160,170,200,.14); }
 </style>
 </head>
 <body>
@@ -368,6 +389,13 @@
       <button id="dDelete" class="hidden">Delete event</button>
       <button id="dClose">Close</button>
     </div>
+  </div>
+
+  <!-- screensaver (30 min idle): sun arc by day, moon arc after 9pm -->
+  <div id="saver" class="hidden">
+    <div id="celestial" class="sun"></div>
+    <div id="saverHorizon"></div>
+    <div id="saverClock"></div>
   </div>
 
   <div id="toast"></div>
