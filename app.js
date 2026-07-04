@@ -82,6 +82,8 @@ function showSignin() {
   $('app').classList.add('hidden');
   $('composer').classList.add('hidden');
   $('addEventBtn').classList.add('hidden');
+  $('vaultBtn').classList.add('hidden');
+  $('vaultView').classList.add('hidden');
 }
 
 async function boot() {
@@ -97,6 +99,7 @@ async function boot() {
     buildTabs();
     switchTab('today');
     updateNotifBar();
+    maybeShowVaultButton();
     loadEarnings();
     loadCountdowns();
     pollSos();
@@ -1394,6 +1397,84 @@ $('pairBtn').addEventListener('click', async () => {
     body: JSON.stringify({ kind: 'apple_tv', name: 'Home display' }),
   });
   $('pairResult').textContent = code;
+});
+
+// ----------------------------------------------------------------
+// Private vault — the 🇺🇸 button appears only for its owner; every
+// request is re-checked server-side, so the button is a door, not
+// the lock.
+// ----------------------------------------------------------------
+
+const VAULT_OWNER_EMAIL = 'heck7554@gmail.com';
+
+function maybeShowVaultButton() {
+  $('vaultBtn').classList.toggle('hidden', state.me?.email !== VAULT_OWNER_EMAIL);
+}
+
+$('vaultBtn').addEventListener('click', () => {
+  $('vaultView').classList.remove('hidden');
+  loadVault();
+});
+$('vaultClose').addEventListener('click', () => $('vaultView').classList.add('hidden'));
+
+async function loadVault() {
+  const { items } = await apiFetch('/vault');
+  $('vaultList').innerHTML = items.map((it) => `
+    <div class="vaultItem">
+      <span class="vKind">${it.kind === 'file' ? '📄' : '🔗'}</span>
+      <span class="vTitle" data-open="${it.id}" data-kind="${it.kind}"
+        ${it.kind === 'link' ? `data-url="${esc(it.url)}"` : ''}>${esc(it.title)}</span>
+      <button class="vDel" data-del="${it.id}">✕</button>
+    </div>`).join('') || '<div class="allDone">Nothing stored yet.</div>';
+
+  $('vaultList').querySelectorAll('[data-open]').forEach((el) =>
+    el.addEventListener('click', async () => {
+      if (el.dataset.kind === 'link') return window.open(el.dataset.url, '_blank');
+      const { path } = await apiFetch(`/vault/file/${el.dataset.open}`);
+      window.open(`${CFG.SUPABASE_URL}${path}`, '_blank'); // signed, expires in an hour
+    }));
+  $('vaultList').querySelectorAll('[data-del]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('Remove this from the vault?')) return;
+      await apiFetch(`/vault/${b.dataset.del}`, { method: 'DELETE' });
+      loadVault();
+    }));
+}
+
+$('vaultLinkForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await apiFetch('/vault/link', {
+      method: 'POST',
+      body: JSON.stringify({ title: $('vlTitle').value.trim(), url: $('vlUrl').value.trim() }),
+    });
+    e.target.reset();
+    loadVault();
+    toast('Link saved ✓');
+  } catch (err) { toast(err.message); }
+});
+
+$('vaultUploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = $('vaultFile').files[0];
+  if (!file) return;
+  const btn = $('vaultUploadBtn');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    // multipart: browser sets the boundary — no JSON content-type here
+    const res = await fetch(`${API}/vault/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+    e.target.reset();
+    loadVault();
+    toast('Uploaded ✓');
+  } catch (err) { toast(err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Upload'; }
 });
 
 // ----------------------------------------------------------------

@@ -277,6 +277,23 @@
   #pairResult { font-size:1.8rem; letter-spacing:.35em; text-align:center; padding:8px;
     font-variant-numeric:tabular-nums; color:var(--accent); min-height:1.4em; }
   .note { color:var(--dim); font-size:.8rem; margin-top:8px; line-height:1.45; }
+  /* ── private vault (owner-only) ────────────────────────────── */
+  #vaultBtn { position:fixed; left:14px; bottom:calc(82px + var(--safe-bottom)); z-index:20;
+    background:none; font-size:1.15rem; opacity:.45; padding:8px; }
+  body.tv #vaultBtn { display:none !important; }
+  #vaultView { position:fixed; inset:0; background:var(--bg); z-index:40; overflow-y:auto;
+    padding:16px 14px calc(30px + var(--safe-bottom)); }
+  #vaultView header { position:static; display:flex; align-items:center; padding:0 0 6px; }
+  #vaultView h2 { flex:1; font-size:1.1rem; color:var(--accent); }
+  #vaultClose { background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    padding:7px 14px; border-radius:12px; }
+  .vaultItem { display:flex; align-items:center; gap:10px; padding:11px 2px;
+    border-bottom:1px solid var(--line); }
+  .vaultItem .vTitle { flex:1; font-size:.95rem; word-break:break-word; cursor:pointer; }
+  .vaultItem .vKind { font-size:1.1rem; }
+  .vaultItem .vDel { background:none; color:var(--red); padding:4px 8px; }
+  #vaultFile { padding:8px; }
+
   #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--panel2);
     border:1px solid var(--accent); padding:10px 18px; border-radius:12px; font-size:.9rem;
     opacity:0; transition:opacity .25s; pointer-events:none; z-index:50; max-width:86vw; }
@@ -491,6 +508,7 @@
       </section>
     </main>
     <button id="addEventBtn" class="gold hidden">＋</button>
+    <button id="vaultBtn" class="hidden" aria-label="flag">🇺🇸</button>
     <button id="exitTv" class="hidden">Exit TV mode</button>
     <nav id="tabs"></nav>
   </div>
@@ -535,6 +553,26 @@
       <button id="dDelete" class="hidden">Delete event</button>
       <button id="dClose">Close</button>
     </div>
+  </div>
+
+  <!-- private vault (rendered only for its owner) -->
+  <div id="vaultView" class="hidden">
+    <header><h2>🇺🇸 Private vault</h2><button id="vaultClose">Close</button></header>
+    <div class="card"><h3>Upload a document</h3>
+      <form id="vaultUploadForm">
+        <input id="vaultFile" type="file" required>
+        <button type="submit" class="gold" id="vaultUploadBtn">Upload</button>
+      </form>
+      <div class="note">Stored privately — only this account can ever open them. Up to 15 MB each.</div>
+    </div>
+    <div class="card"><h3>Save a link</h3>
+      <form id="vaultLinkForm">
+        <input id="vlTitle" placeholder="Name (optional)">
+        <input id="vlUrl" type="url" placeholder="https://…" required>
+        <button type="submit" class="gold">Save link</button>
+      </form>
+    </div>
+    <div class="card"><h3>Documents</h3><div id="vaultList"></div></div>
   </div>
 
   <!-- screensaver (30 min idle): sun arc by day, moon arc after 9pm -->
