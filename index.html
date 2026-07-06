@@ -293,6 +293,29 @@
   .vaultItem .vKind { font-size:1.1rem; }
   .vaultItem .vDel { background:none; color:var(--red); padding:4px 8px; }
   #vaultFile { padding:8px; }
+  #vaultSeg { display:flex; background:var(--panel2); border:1px solid var(--line);
+    border-radius:14px; overflow:hidden; margin-right:10px; }
+  #vaultSeg button { background:none; color:var(--dim); font-size:.75rem; padding:6px 12px; border-radius:0; }
+  #vaultSeg button.on { background:var(--gold-grad); color:var(--accent-dark); font-weight:700; }
+  .kpis { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .kpis .k { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .kpis .k b { display:block; font-size:1.25rem; color:var(--accent); font-variant-numeric:tabular-nums; }
+  .kpis .k span { font-size:.72rem; color:var(--dim); }
+  .benchRow { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:.8rem; }
+  .benchRow .bn { min-width:104px; color:var(--dim); }
+  .benchRow.me .bn { color:var(--accent); font-weight:700; }
+  .benchRow .bb { height:12px; border-radius:6px; background:var(--panel2); flex:1; position:relative; }
+  .benchRow .bb i { position:absolute; inset:0 auto 0 0; border-radius:6px; background:#5f6c76; }
+  .benchRow.me .bb i { background:var(--gold-grad); }
+  .benchRow .bv { min-width:44px; text-align:right; font-variant-numeric:tabular-nums; }
+  .zipRow { display:flex; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:.82rem;
+    align-items:center; font-variant-numeric:tabular-nums; }
+  .zipRow:last-child { border-bottom:none; }
+  .zipRow .zc { font-weight:700; min-width:46px; }
+  .zipRow .zd { flex:1; color:var(--dim); }
+  .zipRow .gapTag { background:var(--red); color:#fff; border-radius:8px; font-size:.62rem; padding:1px 7px; }
+  .finding { display:flex; gap:10px; padding:7px 0; font-size:.85rem; line-height:1.45; }
+  .finding b.n { color:var(--accent); min-width:18px; }
 
   #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--panel2);
     border:1px solid var(--accent); padding:10px 18px; border-radius:12px; font-size:.9rem;
@@ -557,7 +580,14 @@
 
   <!-- private vault (rendered only for its owner) -->
   <div id="vaultView" class="hidden">
-    <header><h2>🇺🇸 Private vault</h2><button id="vaultClose">Close</button></header>
+    <header>
+      <h2>🇺🇸 Private</h2>
+      <div id="vaultSeg">
+        <button data-vs="docs" class="on">Documents</button><button data-vs="biz">Business</button>
+      </div>
+      <button id="vaultClose">Close</button>
+    </header>
+    <div id="vaultDocs">
     <div class="card"><h3>Upload a document</h3>
       <form id="vaultUploadForm">
         <input id="vaultFile" type="file" required>
@@ -573,6 +603,24 @@
       </form>
     </div>
     <div class="card"><h3>Documents</h3><div id="vaultList"></div></div>
+    </div>
+    <div id="vaultBiz" class="hidden">
+      <div class="card">
+        <div class="row" style="align-items:center">
+          <h3 style="flex:1;margin:0">Anesthesia market — Warren Co, KY</h3>
+          <button id="bizRefresh" class="gold" style="padding:7px 14px;font-size:.8rem">Refresh</button>
+        </div>
+        <div class="note" id="bizAsOf"></div>
+        <div class="kpis" id="bizKpis"></div>
+      </div>
+      <div class="card"><h3>Providers per 100k — peer regional hubs</h3><div id="bizBench"></div>
+        <div class="note">Same method every market: NPPES anesthesia NPIs at the anchor city ÷ anchor-county population.</div>
+      </div>
+      <div class="card"><h3>Coverage by zip area</h3><div id="bizZips"></div>
+        <div class="note">Seniors (65+) per locally-based provider. GAP = aging corridor with minimal local presence.</div>
+      </div>
+      <div class="card"><h3>Findings</h3><div id="bizFindings"></div></div>
+    </div>
   </div>
 
   <!-- screensaver (30 min idle): sun arc by day, moon arc after 9pm -->

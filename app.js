@@ -1417,6 +1417,73 @@ $('vaultBtn').addEventListener('click', () => {
 });
 $('vaultClose').addEventListener('click', () => $('vaultView').classList.add('hidden'));
 
+// Documents | Business segmented control
+$('vaultSeg').querySelectorAll('button').forEach((b) =>
+  b.addEventListener('click', () => {
+    $('vaultSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    const biz = b.dataset.vs === 'biz';
+    $('vaultDocs').classList.toggle('hidden', biz);
+    $('vaultBiz').classList.toggle('hidden', !biz);
+    if (biz) loadBiz();
+  }));
+
+// ── Business: market intelligence panel ─────────────────────────
+
+const fmtNum = (n) => Number(n).toLocaleString();
+
+async function loadBiz(refresh = false) {
+  try {
+    const { data, asOf } = await apiFetch(
+      refresh ? '/biz/market/refresh' : '/biz/market',
+      refresh ? { method: 'POST' } : {},
+    );
+    renderBiz(data, asOf);
+  } catch (err) { toast(err.message); }
+}
+
+$('bizRefresh').addEventListener('click', async () => {
+  const b = $('bizRefresh');
+  b.disabled = true; b.textContent = 'Pulling live data…';
+  await loadBiz(true);
+  b.disabled = false; b.textContent = 'Refresh';
+});
+
+function renderBiz(d, asOf) {
+  $('bizAsOf').textContent = `Data as of ${new Date(asOf).toLocaleDateString()} · NPPES + CMS + Census, public de-identified data`;
+
+  const seniors = Object.values(d.zips ?? {}).reduce((s, z) => s + (z.seniors65plus ?? 0), 0);
+  $('bizKpis').innerHTML = [
+    [fmtNum(d.county?.popNow ?? 0), 'county population (ACS)'],
+    [`+${d.county?.growth2020to2025pct ?? '?'}%`, 'growth 2020–25'],
+    [fmtNum(d.providers?.nppesWarrenTotal ?? 0), 'anesthesia providers (NPPES)'],
+    [fmtNum(seniors), 'residents 65+'],
+  ].map(([v, l]) => `<div class="k"><b>${v}</b><span>${l}</span></div>`).join('');
+
+  const bench = d.benchmarks ?? [];
+  const max = Math.max(...bench.map((b) => b.per100k), 1);
+  $('bizBench').innerHTML = bench.map((b) => `
+    <div class="benchRow ${b.market.startsWith('Bowling Green') ? 'me' : ''}">
+      <span class="bn">${esc(b.market.replace(' (Warren Co)', '').replace(' (workforce est.)', ''))}</span>
+      <span class="bb"><i style="width:${Math.round(b.per100k / max * 100)}%"></i></span>
+      <span class="bv">${b.per100k}</span>
+    </div>`).join('');
+
+  $('bizZips').innerHTML = Object.entries(d.zips ?? {})
+    .sort((a, b) => b[1].seniors65plus - a[1].seniors65plus)
+    .map(([zip, z]) => `
+      <div class="zipRow">
+        <span class="zc">${zip}</span>
+        <span class="zd">${fmtNum(z.population)} pop · ${fmtNum(z.seniors65plus)} 65+</span>
+        <span>${z.providers} prov</span>
+        <span style="min-width:64px;text-align:right">${z.seniorsPerProvider ? fmtNum(z.seniorsPerProvider) + '/prov' : '—'}</span>
+        ${(!z.providers && z.seniors65plus > 250) || (z.seniorsPerProvider ?? 0) > 500
+          ? '<span class="gapTag">GAP</span>' : ''}
+      </div>`).join('');
+
+  $('bizFindings').innerHTML = (d.findings ?? [])
+    .map((f, i) => `<div class="finding"><b class="n">${i + 1}</b><span>${esc(f)}</span></div>`).join('');
+}
+
 async function loadVault() {
   const { items } = await apiFetch('/vault');
   $('vaultList').innerHTML = items.map((it) => `
