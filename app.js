@@ -596,13 +596,45 @@ async function loadLists() {
       loadLists();
     }));
 
-  // only parents see the assign form
-  $('addTaskForm').classList.toggle('hidden', !isParent());
-  if (isParent()) {
+  // parents assign tasks — plus the richeyhr account by name grant
+  const canAssign = isParent() || (state.me.email ?? '').toLowerCase().startsWith('richeyhr');
+  $('addTaskForm').classList.toggle('hidden', !canAssign);
+  if (canAssign) {
     $('tMember').innerHTML = state.members.map((m) =>
       `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
   }
+
+  // grocery push recipients
+  if (!state.gPushPicked) state.gPushPicked = new Set();
+  $('gPushChips').innerHTML = state.members
+    .filter((m) => m.id !== state.me.id)
+    .map((m) => `<button type="button" data-gp="${m.id}" style="--c:${m.color}"
+      class="${state.gPushPicked.has(m.id) ? 'on' : ''}">${esc(m.displayName)}</button>`).join('');
+  $('gPushChips').querySelectorAll('button').forEach((b) => {
+    b.style.cssText += ';background:var(--panel2);color:var(--dim);border:1px solid var(--line);padding:7px 12px;border-radius:20px;font-size:.85rem';
+    if (b.classList.contains('on')) {
+      b.style.borderColor = b.style.getPropertyValue('--c');
+      b.style.color = 'var(--text)';
+    }
+    b.addEventListener('click', () => {
+      const id = b.dataset.gp;
+      state.gPushPicked.has(id) ? state.gPushPicked.delete(id) : state.gPushPicked.add(id);
+      loadLists();
+    });
+  });
 }
+
+$('gPushBtn').addEventListener('click', async () => {
+  if (!state.gPushPicked?.size) return toast('Pick who should get the list.');
+  try {
+    const { sent, items } = await apiFetch('/grocery/push', {
+      method: 'POST', body: JSON.stringify({ memberIds: [...state.gPushPicked] }),
+    });
+    toast(`List of ${items} sent to ${sent} ${sent === 1 ? 'person' : 'people'} 📤`);
+    state.gPushPicked.clear();
+    loadLists();
+  } catch (err) { toast(err.message); }
+});
 
 $('addGroceryForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1027,6 +1059,8 @@ async function loadMessages() {
     state.thread = threads.find((t) => t.kind === 'family') ?? threads[0];
   }
   if (!state.thread) return;
+  // archive control: vault owner only
+  $('chatTools').classList.toggle('hidden', state.me?.email !== VAULT_OWNER_EMAIL);
   const { messages } = await apiFetch(`/threads/${state.thread.id}/messages`);
   $('msgList').innerHTML = messages.map((m) => `
     <div class="msg ${m.senderId === state.me.id ? 'mine' : ''} ${m.isAnnouncement ? 'announce' : ''}">
@@ -1035,6 +1069,13 @@ async function loadMessages() {
     </div>`).join('');
   $('msgList').lastElementChild?.scrollIntoView({ block: 'end' });
 }
+
+$('archiveChatBtn').addEventListener('click', async () => {
+  if (!confirm('Archive the whole chat? It clears for everyone; you keep a private copy under 🇺🇸 → Archive.')) return;
+  const { archived } = await apiFetch(`/chat/archive/${state.thread.id}`, { method: 'POST' });
+  toast(`${archived} messages archived ✓`);
+  loadMessages();
+});
 
 $('msgSend').addEventListener('click', sendMessage);
 $('msgInput').addEventListener('keydown', (e) => e.key === 'Enter' && sendMessage());
@@ -1417,15 +1458,31 @@ $('vaultBtn').addEventListener('click', () => {
 });
 $('vaultClose').addEventListener('click', () => $('vaultView').classList.add('hidden'));
 
-// Documents | Business segmented control
+// Docs | Business | Archive segmented control
 $('vaultSeg').querySelectorAll('button').forEach((b) =>
   b.addEventListener('click', () => {
     $('vaultSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
-    const biz = b.dataset.vs === 'biz';
-    $('vaultDocs').classList.toggle('hidden', biz);
-    $('vaultBiz').classList.toggle('hidden', !biz);
-    if (biz) loadBiz();
+    const view = b.dataset.vs;
+    $('vaultDocs').classList.toggle('hidden', view !== 'docs');
+    $('vaultBiz').classList.toggle('hidden', view !== 'biz');
+    $('vaultArc').classList.toggle('hidden', view !== 'arc');
+    if (view === 'biz') loadBiz();
+    if (view === 'arc') loadArchive();
   }));
+
+// ── Archived chat (owner-only reading room) ─────────────────────
+
+async function loadArchive() {
+  const { messages } = await apiFetch('/chat/archive');
+  $('arcList').innerHTML = messages.map((m) => `
+    <div class="vaultItem">
+      <div style="flex:1">
+        <div class="byline">${esc(m.senderName ?? '')} · ${new Date(m.createdAt).toLocaleString(undefined,
+          { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${m.isAnnouncement ? ' · 📣' : ''}</div>
+        <div style="font-size:.92rem">${esc(m.body)}</div>
+      </div>
+    </div>`).join('') || '<div class="allDone">Nothing archived yet.</div>';
+}
 
 // ── Business: market intelligence panel ─────────────────────────
 

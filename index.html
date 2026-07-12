@@ -397,6 +397,11 @@
             <button type="submit" class="gold" style="padding:0 18px">Add</button>
           </form>
           <div id="groceryList"></div>
+          <div id="gPush" style="margin-top:10px">
+            <div class="note" style="margin:0 0 6px">Send the list to:</div>
+            <div id="gPushChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            <button id="gPushBtn" class="gold" style="width:100%;padding:10px;margin-top:8px">📤 Push list to selected</button>
+          </div>
           <div class="note">Anyone can add. Tap the circle when it's in the cart — it disappears for everyone.</div>
         </div>
         <div class="card"><h3>✅ Tasks</h3>
@@ -419,7 +424,12 @@
           <div id="taskGroups"></div>
         </div>
       </section>
-      <section id="view-messages" class="hidden"><div id="msgList"></div></section>
+      <section id="view-messages" class="hidden">
+        <div id="chatTools" class="hidden" style="display:flex;justify-content:flex-end;padding-top:10px">
+          <button id="archiveChatBtn" style="background:var(--panel2);color:var(--dim);border:1px solid var(--line);font-size:.75rem;padding:6px 12px;border-radius:14px">🗄 Archive chat</button>
+        </div>
+        <div id="msgList"></div>
+      </section>
       <section id="view-games" class="hidden">
         <div id="gameModes">
           <button data-game="fact">🧠<span>Fun Fact</span></button>
@@ -583,7 +593,7 @@
     <header>
       <h2>🇺🇸 Private</h2>
       <div id="vaultSeg">
-        <button data-vs="docs" class="on">Documents</button><button data-vs="biz">Business</button>
+        <button data-vs="docs" class="on">Docs</button><button data-vs="biz">Business</button><button data-vs="arc">Archive</button>
       </div>
       <button id="vaultClose">Close</button>
     </header>
@@ -620,6 +630,12 @@
         <div class="note">Seniors (65+) per locally-based provider. GAP = aging corridor with minimal local presence.</div>
       </div>
       <div class="card"><h3>Findings</h3><div id="bizFindings"></div></div>
+    </div>
+    <div id="vaultArc" class="hidden">
+      <div class="card"><h3>🗄 Archived chat</h3>
+        <div class="note">Messages archived from the family chat. Only this account can see them.</div>
+        <div id="arcList"></div>
+      </div>
     </div>
   </div>
 
