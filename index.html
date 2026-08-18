@@ -153,6 +153,28 @@
   .weekToggle { background:none; color:var(--dim); border:0; padding:6px 2px; font-size:.78rem;
     letter-spacing:.02em; }
 
+  /* ── weekly task planner (each day its own color) ──────────── */
+  #tkKids { display:flex; gap:6px; padding:12px 0 4px; flex-wrap:wrap; }
+  #tkKids:empty { display:none; }
+  #tkKids button { background:var(--panel2); color:var(--dim); border:1.5px solid var(--line);
+    padding:7px 14px; border-radius:18px; font-size:.85rem; font-weight:600; }
+  #tkKids button.on { border-color:var(--kc, var(--accent)); color:var(--text);
+    background:color-mix(in srgb, var(--kc, var(--accent)) 20%, var(--panel2)); }
+  #weekPlan { display:flex; flex-direction:column; gap:10px; padding-top:10px; }
+  .dayCard { background:var(--panel); border-radius:14px; border-left:5px solid var(--dc);
+    padding:10px 12px 8px; }
+  .dayCard.today { outline:1.5px solid var(--dc); background:color-mix(in srgb, var(--dc) 7%, var(--panel)); }
+  .dayCard.past { opacity:.55; }
+  .dayCard h4 { display:flex; align-items:baseline; gap:8px; font-size:.82rem;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--dc); margin-bottom:2px; }
+  .dayCard h4 .dnum { font-size:1.05rem; color:var(--text); }
+  .dayCard h4 .todayTag { margin-left:auto; font-size:.68rem; background:var(--dc);
+    color:#fff; border-radius:9px; padding:1px 8px; letter-spacing:.05em; }
+  .dayCard .checkRow { padding:7px 0; }
+  .dayCard .whoDot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:7px; }
+  .dayCard .allDone { padding:4px 0 6px; }
+  body.daylight .dayCard h4 .todayTag { color:#fff; }
+
   /* ── today's chores (main page) ────────────────────────────── */
   #choresToday { margin:0 14px 8px; }
   #choresToday:empty { display:none; }
@@ -401,10 +423,11 @@
         <div id="gridWrap"><div id="timeGrid"></div></div>
         <div id="weekGrid" class="hidden"></div>
       </section>
-      <section id="view-lists" class="hidden">
-        <div class="card"><h3>🎒 School</h3>
-          <div id="schoolRes"></div>
-          <div id="schoolGroups"></div>
+      <section id="view-tasks" class="hidden">
+        <div id="tkKids"></div>
+        <div id="schoolRes"></div>
+        <div id="weekPlan"></div>
+        <div class="card"><h3>Add school task</h3>
           <form id="addSchoolForm" class="hidden">
             <div class="row">
               <input id="scTitle" placeholder="School task…" required autocomplete="off">
@@ -424,9 +447,29 @@
           <div class="row hidden" id="schoolPullRow" style="margin-top:8px">
             <button id="schoolPullBtn" style="flex:1;background:var(--panel2);color:var(--dim);border:1px solid var(--line);padding:9px;border-radius:10px;font-size:.8rem">📄 Pull Henry's planner now</button>
           </div>
-          <div class="note">Homework falls off when checked. Henry's weekly planner imports
-            automatically every Monday at 6:00 AM — links from the doc ride along on each task.</div>
         </div>
+        <div class="card"><h3>Add chore</h3>
+          <form id="addTaskForm" class="hidden">
+            <div class="row">
+              <input id="tTitle" placeholder="New chore…" required autocomplete="off">
+              <select id="tMember" style="max-width:38%"></select>
+            </div>
+            <div class="row">
+              <input id="tValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Worth $ (optional)">
+              <select id="tRepeat" style="max-width:46%">
+                <option value="">One-time</option>
+                <option value="daily">Daily chore</option>
+                <option value="weekly">Weekly chore</option>
+                <option value="monthly">Monthly chore</option>
+              </select>
+            </div>
+            <button type="submit" class="gold">Assign chore</button>
+          </form>
+          <div class="note">Homework and chores fall off when checked. Henry's planner imports
+            automatically every Monday at 6:00 AM with links attached.</div>
+        </div>
+      </section>
+      <section id="view-lists" class="hidden">
         <div class="card"><h3>🍽 Meal plan</h3>
           <div id="mealList"></div>
           <div class="note" id="mealNote">Tap 🛒 to send a dinner's ingredients straight to the grocery list.</div>
@@ -443,25 +486,6 @@
             <button id="gPushBtn" class="gold" style="width:100%;padding:10px;margin-top:8px">📤 Push list to selected</button>
           </div>
           <div class="note">Anyone can add. Tap the circle when it's in the cart — it disappears for everyone.</div>
-        </div>
-        <div class="card"><h3>✅ Tasks</h3>
-          <form id="addTaskForm" class="hidden">
-            <div class="row">
-              <input id="tTitle" placeholder="New task…" required autocomplete="off">
-              <select id="tMember" style="max-width:38%"></select>
-            </div>
-            <div class="row">
-              <input id="tValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Worth $ (optional)">
-              <select id="tRepeat" style="max-width:46%">
-                <option value="">One-time</option>
-                <option value="daily">Daily chore</option>
-                <option value="weekly">Weekly chore</option>
-                <option value="monthly">Monthly chore</option>
-              </select>
-            </div>
-            <button type="submit" class="gold">Assign task</button>
-          </form>
-          <div id="taskGroups"></div>
         </div>
       </section>
       <section id="view-messages" class="hidden">

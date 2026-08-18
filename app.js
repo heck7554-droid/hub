@@ -118,6 +118,7 @@ function buildTabs() {
   // SOS is on every profile — parents get Admin as a fifth tab
   const tabs = [
     { id: 'today', label: 'Today', icon: '📅' },
+    { id: 'tasks', label: 'Tasks', icon: '✅' },
     { id: 'lists', label: 'Lists', icon: '📝' },
     { id: 'messages', label: 'Chat', icon: '💬' },
     { id: 'games', label: 'Games', icon: '🎲' },
@@ -135,7 +136,7 @@ function buildTabs() {
 
 function switchTab(tab) {
   state.tab = tab;
-  for (const view of ['today', 'lists', 'messages', 'games', 'sos', 'admin']) {
+  for (const view of ['today', 'tasks', 'lists', 'messages', 'games', 'sos', 'admin']) {
     $(`view-${view}`).classList.toggle('hidden', view !== tab);
   }
   $('composer').classList.toggle('hidden', tab !== 'messages');
@@ -143,6 +144,7 @@ function switchTab(tab) {
   $('tabs').querySelectorAll('button').forEach((b) =>
     b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'today') { renderDayView(); loadTodayChores(); }
+  if (tab === 'tasks') loadTasksTab();
   if (tab === 'lists') loadLists();
   if (tab === 'messages') loadMessages();
   if (tab === 'admin') loadAdmin();
@@ -566,62 +568,101 @@ function dueBadge(t) {
   return `<span class="dueBadge ${cls}">${t.dueOn < today ? '⚠ ' : ''}${label}</span>`;
 }
 
-function renderSchool(tasks) {
-  const school = tasks.filter((t) => t.category === 'school')
-    .sort((a, b) => (a.dueOn ?? '0000').localeCompare(b.dueOn ?? '0000'));
+// ----------------------------------------------------------------
+// Tasks tab: the kids' week as seven day cards, each day its own
+// color, today highlighted — school work lands on its due day,
+// scheduled chores on their day, everything tappable to complete.
+// ----------------------------------------------------------------
+
+const DAY_COLORS = ['#4f83c2', '#3fa46a', '#c9902e', '#8e6fd8', '#d05a7a', '#2fa8a0', '#c96b3a'];
+
+async function loadTasksTab() {
+  loadSchoolResources();
+  const { tasks } = await apiFetch('/tasks');
   const kids = state.members.filter((m) => m.role === 'child');
+  const colorOf = Object.fromEntries(state.members.map((m) => [m.id, m.color]));
+  const nameOf = Object.fromEntries(state.members.map((m) => [m.id, m.displayName]));
+
+  // kid filter chips: kids land on themselves, parents on All
+  if (!state.taskKid) state.taskKid = state.me.role === 'child' ? state.me.id : 'all';
+  $('tkKids').innerHTML = [{ id: 'all', displayName: 'Everyone', color: '#d4af37' }, ...kids]
+    .map((m) => `<button data-tk="${m.id}" class="${state.taskKid === m.id ? 'on' : ''}"
+      style="--kc:${m.color}">${esc(m.displayName)}</button>`).join('');
+  $('tkKids').querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => { state.taskKid = b.dataset.tk; loadTasksTab(); }));
+
+  const visible = tasks.filter((t) =>
+    kids.some((k) => k.id === t.memberId)
+    && (state.taskKid === 'all' || t.memberId === state.taskKid));
+
   const today = localDateKey(new Date());
-  if (!state.schoolWeekOpen) state.schoolWeekOpen = new Set();
+  const grace = localDateKey(new Date(Date.now() - 3 * DAY_MS));
+  const start = startOfDay(new Date());
+  const mondayShift = (start.getDay() + 6) % 7;
+  const week = [...Array(7)].map((_, i) =>
+    new Date(start.getTime() + (i - mondayShift) * DAY_MS));
 
   const row = (t) => `
     <div class="checkRow">
-      <button class="tick" data-sc="${t.id}" aria-label="done"></button>
-      <div class="what">${esc(t.title)}${dueBadge(t)}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq === 'daily' ? 'nightly' : t.repeatFreq}</span>` : ''}</div>
-      ${t.linkUrl ? `<button class="linkBtn" data-lk="${esc(t.linkUrl)}">🔗</button>` : ''}
+      <button class="tick" data-tk-done="${t.id}" aria-label="done"></button>
+      <span class="whoDot" style="background:${colorOf[t.memberId] ?? '#666'}" title="${esc(nameOf[t.memberId] ?? '')}"></span>
+      <div class="what">${t.category === 'school' ? '🎒 ' : ''}${esc(t.title)}
+        ${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}
+        ${t.dueOn && t.dueOn < today ? dueBadge(t) : ''}
+        ${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq === 'daily' ? 'nightly' : t.repeatFreq}</span>` : ''}</div>
+      ${t.linkUrl ? `<button class="linkBtn" data-tk-lk="${esc(t.linkUrl)}">🔗</button>` : ''}
     </div>`;
 
-  $('schoolGroups').innerHTML = kids.map((m) => {
-    const list = school.filter((t) => t.memberId === m.id);
-    // today's list: due today, recently overdue, or undated/nightly —
-    // the rest of the week waits behind the expander until its day comes
-    // (items more than 3 days past due are stale imports, not debts)
-    const grace = localDateKey(new Date(Date.now() - 3 * DAY_MS));
-    const todayList = list.filter((t) => !t.dueOn || (t.dueOn <= today && t.dueOn >= grace));
-    const upcoming = list.filter((t) => t.dueOn && t.dueOn > today);
-    const open = state.schoolWeekOpen.has(m.id);
-    return `<div class="taskGroup">
-      <h4><i style="background:${m.color}"></i>${esc(m.displayName)} — today</h4>
-      ${todayList.map(row).join('') || '<div class="allDone">Done for today ✓</div>'}
-      ${upcoming.length ? `
-        <button class="weekToggle" data-wk="${m.id}">${open ? '▾' : '▸'} Later this week (${upcoming.length})</button>
-        ${open ? upcoming.map(row).join('') : ''}` : ''}
+  $('weekPlan').innerHTML = week.map((day, i) => {
+    const key = localDateKey(day);
+    const isToday = key === today;
+    // past days list nothing — anything unfinished migrates to today's
+    // card as ⚠ catch-up, so it never shows in two places
+    let items = key < today ? [] : visible.filter((t) =>
+      (t.category === 'school' && t.dueOn === key)
+      || (t.category !== 'school' && t.availableOn === key && key > today));
+    const migrated = key < today
+      ? visible.filter((t) => t.category === 'school' && t.dueOn === key).length : 0;
+    if (isToday) {
+      // today also carries: chores available now, nightly logs, and
+      // recently-missed school work (⚠, within the 3-day grace)
+      items = items.concat(visible.filter((t) =>
+        (!t.dueOn && (!t.availableOn || t.availableOn <= today)
+          && !items.includes(t))
+        || (t.category === 'school' && t.dueOn && t.dueOn < today && t.dueOn >= grace)));
+    }
+    return `<div class="dayCard ${isToday ? 'today' : ''} ${key < today ? 'past' : ''}" style="--dc:${DAY_COLORS[i]}" ${isToday ? 'id="todayCard"' : ''}>
+      <h4>${day.toLocaleDateString(undefined, { weekday: 'long' })}
+        <span class="dnum">${day.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}</span>
+        ${isToday ? '<span class="todayTag">TODAY</span>' : ''}</h4>
+      ${items.map(row).join('') || `<div class="allDone">${key < today ? (migrated ? `⚠ ${migrated} moved to today` : 'Done ✓') : 'Nothing yet'}</div>`}
     </div>`;
   }).join('');
-  $('schoolGroups').querySelectorAll('button[data-wk]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const id = b.dataset.wk;
-      state.schoolWeekOpen.has(id) ? state.schoolWeekOpen.delete(id) : state.schoolWeekOpen.add(id);
-      renderSchool(tasks); // re-render rebinds everything
-    }));
 
-  $('addSchoolForm').classList.toggle('hidden', !canAssign());
-  $('schoolPullRow').classList.toggle('hidden', !canAssign());
-  if (canAssign()) {
-    $('scMember').innerHTML = kids.map((m) =>
-      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
-  }
-  bindSchoolRows();
-}
-
-function bindSchoolRows() {
-  $('schoolGroups').querySelectorAll('button[data-sc]').forEach((b) =>
+  $('weekPlan').querySelectorAll('button[data-tk-done]').forEach((b) =>
     b.addEventListener('click', async () => {
       b.closest('.checkRow').style.opacity = '0.35';
-      await apiFetch(`/tasks/${b.dataset.sc}/complete`, { method: 'POST' });
-      loadLists();
+      const { task, earnedCents } = await apiFetch(`/tasks/${b.dataset.tkDone}/complete`, { method: 'POST' });
+      if (earnedCents > 0) {
+        const who = state.members.find((m) => m.id === task.memberId);
+        toast(`${who?.id === state.me.id ? 'You' : who?.displayName ?? 'They'} earned ${money(earnedCents)} 🎉`);
+        loadEarnings();
+      }
+      loadTasksTab();
     }));
-  $('schoolGroups').querySelectorAll('button[data-lk]').forEach((b) =>
-    b.addEventListener('click', () => window.open(b.dataset.lk, '_blank')));
+  $('weekPlan').querySelectorAll('button[data-tk-lk]').forEach((b) =>
+    b.addEventListener('click', () => window.open(b.dataset.tkLk, '_blank')));
+
+  $('addSchoolForm').classList.toggle('hidden', !canAssign());
+  $('addTaskForm').classList.toggle('hidden', !canAssign());
+  $('schoolPullRow').classList.toggle('hidden', !canAssign());
+  if (canAssign()) {
+    const opts = kids.map((m) => `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+    $('scMember').innerHTML = opts;
+    $('tMember').innerHTML = state.members.map((m) =>
+      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  }
+  document.getElementById('todayCard')?.scrollIntoView({ block: 'nearest' });
 }
 
 async function loadSchoolResources() {
@@ -653,7 +694,7 @@ $('addSchoolForm').addEventListener('submit', async (e) => {
     });
     e.target.reset();
     toast('School task added ✓');
-    loadLists();
+    loadTasksTab();
   } catch (err) { toast(err.message); }
 });
 
@@ -663,18 +704,14 @@ $('schoolPullBtn').addEventListener('click', async () => {
   try {
     const r = await apiFetch('/school/pull', { method: 'POST' });
     toast(`Planner: ${r.createdTasks} new tasks (week of ${r.week ?? '?'}) ✓`);
-    loadLists();
+    loadTasksTab();
   } catch (err) { toast(err.message); }
   finally { b.disabled = false; b.textContent = "📄 Pull Henry's planner now"; }
 });
 
 async function loadLists() {
   loadMeals();
-  loadSchoolResources();
-  const [{ items }, { tasks }] = await Promise.all([
-    apiFetch('/grocery'), apiFetch('/tasks'),
-  ]);
-  renderSchool(tasks);
+  const { items } = await apiFetch('/grocery');
 
   $('groceryList').innerHTML = items.map((it) => `
     <div class="checkRow">
@@ -688,41 +725,6 @@ async function loadLists() {
       await apiFetch(`/grocery/${b.dataset.g}/check`, { method: 'POST' });
       loadLists();
     }));
-
-  // tasks grouped per family member — everyone sees every list
-  // (school work lives in its own card above)
-  const byMember = new Map(state.members.map((m) => [m.id, []]));
-  for (const t of tasks.filter((x) => x.category !== 'school')) byMember.get(t.memberId)?.push(t);
-  $('taskGroups').innerHTML = state.members.map((m) => {
-    const list = byMember.get(m.id) ?? [];
-    return `<div class="taskGroup">
-      <h4><i style="background:${m.color}"></i>${esc(m.displayName)}${m.id === state.me.id ? ' (you)' : ''}</h4>
-      ${list.map((t) => `
-        <div class="checkRow">
-          <button class="tick" data-t="${t.id}" aria-label="mark done"></button>
-          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq}</span>` : ''}</div>
-        </div>`).join('') || '<div class="allDone">All done ✓</div>'}
-    </div>`;
-  }).join('');
-  $('taskGroups').querySelectorAll('button[data-t]').forEach((b) =>
-    b.addEventListener('click', async () => {
-      b.closest('.checkRow').style.opacity = '0.35';
-      const { task, earnedCents } = await apiFetch(`/tasks/${b.dataset.t}/complete`, { method: 'POST' });
-      if (earnedCents > 0) {
-        const who = state.members.find((m) => m.id === task.memberId);
-        toast(`${who?.id === state.me.id ? 'You' : who?.displayName ?? 'They'} earned ${money(earnedCents)} 🎉`);
-        loadEarnings();
-      }
-      loadLists();
-    }));
-
-  // parents assign tasks — plus the richeyhr account by name grant
-  const canAssign = isParent() || (state.me.email ?? '').toLowerCase().startsWith('richeyhr');
-  $('addTaskForm').classList.toggle('hidden', !canAssign);
-  if (canAssign) {
-    $('tMember').innerHTML = state.members.map((m) =>
-      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
-  }
 
   // grocery push recipients
   if (!state.gPushPicked) state.gPushPicked = new Set();
@@ -780,8 +782,8 @@ $('addTaskForm').addEventListener('submit', async (e) => {
       }),
     });
     $('tTitle').value = ''; $('tValue').value = ''; $('tRepeat').value = '';
-    toast('Task assigned ✓');
-    loadLists();
+    toast('Chore assigned ✓');
+    loadTasksTab();
   } catch (err) { toast(err.message); }
 });
 
