@@ -570,18 +570,50 @@ function renderSchool(tasks) {
   const school = tasks.filter((t) => t.category === 'school')
     .sort((a, b) => (a.dueOn ?? '0000').localeCompare(b.dueOn ?? '0000'));
   const kids = state.members.filter((m) => m.role === 'child');
+  const today = localDateKey(new Date());
+  if (!state.schoolWeekOpen) state.schoolWeekOpen = new Set();
+
+  const row = (t) => `
+    <div class="checkRow">
+      <button class="tick" data-sc="${t.id}" aria-label="done"></button>
+      <div class="what">${esc(t.title)}${dueBadge(t)}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq === 'daily' ? 'nightly' : t.repeatFreq}</span>` : ''}</div>
+      ${t.linkUrl ? `<button class="linkBtn" data-lk="${esc(t.linkUrl)}">🔗</button>` : ''}
+    </div>`;
+
   $('schoolGroups').innerHTML = kids.map((m) => {
     const list = school.filter((t) => t.memberId === m.id);
+    // today's list: due today, recently overdue, or undated/nightly —
+    // the rest of the week waits behind the expander until its day comes
+    // (items more than 3 days past due are stale imports, not debts)
+    const grace = localDateKey(new Date(Date.now() - 3 * DAY_MS));
+    const todayList = list.filter((t) => !t.dueOn || (t.dueOn <= today && t.dueOn >= grace));
+    const upcoming = list.filter((t) => t.dueOn && t.dueOn > today);
+    const open = state.schoolWeekOpen.has(m.id);
     return `<div class="taskGroup">
-      <h4><i style="background:${m.color}"></i>${esc(m.displayName)}</h4>
-      ${list.map((t) => `
-        <div class="checkRow">
-          <button class="tick" data-sc="${t.id}" aria-label="done"></button>
-          <div class="what">${esc(t.title)}${dueBadge(t)}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq === 'daily' ? 'nightly' : t.repeatFreq}</span>` : ''}</div>
-          ${t.linkUrl ? `<button class="linkBtn" data-lk="${esc(t.linkUrl)}">🔗</button>` : ''}
-        </div>`).join('') || '<div class="allDone">All caught up ✓</div>'}
+      <h4><i style="background:${m.color}"></i>${esc(m.displayName)} — today</h4>
+      ${todayList.map(row).join('') || '<div class="allDone">Done for today ✓</div>'}
+      ${upcoming.length ? `
+        <button class="weekToggle" data-wk="${m.id}">${open ? '▾' : '▸'} Later this week (${upcoming.length})</button>
+        ${open ? upcoming.map(row).join('') : ''}` : ''}
     </div>`;
   }).join('');
+  $('schoolGroups').querySelectorAll('button[data-wk]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const id = b.dataset.wk;
+      state.schoolWeekOpen.has(id) ? state.schoolWeekOpen.delete(id) : state.schoolWeekOpen.add(id);
+      renderSchool(tasks); // re-render rebinds everything
+    }));
+
+  $('addSchoolForm').classList.toggle('hidden', !canAssign());
+  $('schoolPullRow').classList.toggle('hidden', !canAssign());
+  if (canAssign()) {
+    $('scMember').innerHTML = kids.map((m) =>
+      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  }
+  bindSchoolRows();
+}
+
+function bindSchoolRows() {
   $('schoolGroups').querySelectorAll('button[data-sc]').forEach((b) =>
     b.addEventListener('click', async () => {
       b.closest('.checkRow').style.opacity = '0.35';
@@ -590,13 +622,6 @@ function renderSchool(tasks) {
     }));
   $('schoolGroups').querySelectorAll('button[data-lk]').forEach((b) =>
     b.addEventListener('click', () => window.open(b.dataset.lk, '_blank')));
-
-  $('addSchoolForm').classList.toggle('hidden', !canAssign());
-  $('schoolPullRow').classList.toggle('hidden', !canAssign());
-  if (canAssign()) {
-    $('scMember').innerHTML = kids.map((m) =>
-      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
-  }
 }
 
 async function loadSchoolResources() {
