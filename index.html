@@ -137,6 +137,19 @@
   .allDone { color:var(--dim); font-size:.85rem; padding:8px 2px; }
   .valueBadge { background:rgba(212,175,55,.16); color:var(--accent); border:1px solid rgba(212,175,55,.35);
     border-radius:10px; padding:1px 8px; font-size:.75rem; font-weight:700; margin-left:8px; white-space:nowrap; }
+  .dueBadge { background:var(--panel2); color:var(--dim); border:1px solid var(--line);
+    border-radius:10px; padding:1px 8px; font-size:.72rem; margin-left:8px; white-space:nowrap; }
+  .dueBadge.today { color:var(--accent); border-color:var(--accent); font-weight:700; }
+  .dueBadge.overdue { color:var(--red); border-color:var(--red); font-weight:700; }
+  .linkBtn { background:none; border:1px solid var(--line); border-radius:8px; padding:3px 8px;
+    font-size:.85rem; margin-left:6px; }
+  #schoolRes { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  #schoolRes:empty { display:none; }
+  #schoolRes a { display:inline-flex; align-items:center; gap:5px; background:var(--panel2);
+    border:1px solid var(--line); border-radius:14px; padding:5px 11px; font-size:.78rem;
+    color:var(--text); text-decoration:none; max-width:100%; }
+  #schoolRes a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+  #schoolRes .resDel { background:none; color:var(--red); border:0; padding:0 2px; font-size:.8rem; }
 
   /* ── today's chores (main page) ────────────────────────────── */
   #choresToday { margin:0 14px 8px; }
@@ -387,6 +400,31 @@
         <div id="weekGrid" class="hidden"></div>
       </section>
       <section id="view-lists" class="hidden">
+        <div class="card"><h3>🎒 School</h3>
+          <div id="schoolRes"></div>
+          <div id="schoolGroups"></div>
+          <form id="addSchoolForm" class="hidden">
+            <div class="row">
+              <input id="scTitle" placeholder="School task…" required autocomplete="off">
+              <select id="scMember" style="max-width:34%"></select>
+            </div>
+            <div class="row">
+              <input id="scDue" type="date" title="Due date (optional)">
+              <select id="scRepeat" style="max-width:44%">
+                <option value="">One-time</option>
+                <option value="daily">Every night</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <input id="scLink" type="url" placeholder="Link (optional)">
+            <button type="submit" class="gold">Add school task</button>
+          </form>
+          <div class="row hidden" id="schoolPullRow" style="margin-top:8px">
+            <button id="schoolPullBtn" style="flex:1;background:var(--panel2);color:var(--dim);border:1px solid var(--line);padding:9px;border-radius:10px;font-size:.8rem">📄 Pull Henry's planner now</button>
+          </div>
+          <div class="note">Homework falls off when checked. Henry's weekly planner imports
+            automatically every Monday at 6:00 AM — links from the doc ride along on each task.</div>
+        </div>
         <div class="card"><h3>🍽 Meal plan</h3>
           <div id="mealList"></div>
           <div class="note" id="mealNote">Tap 🛒 to send a dinner's ingredients straight to the grocery list.</div>

@@ -551,11 +551,105 @@ $('adjustForm').addEventListener('submit', async (e) => {
 // Lists: grocery + per-member tasks
 // ----------------------------------------------------------------
 
+// ----------------------------------------------------------------
+// School: per-child homework with due dates + links, resources row
+// ----------------------------------------------------------------
+
+const canAssign = () => isParent() || (state.me?.email ?? '').toLowerCase().startsWith('richeyhr');
+
+function dueBadge(t) {
+  if (!t.dueOn) return '';
+  const today = localDateKey(new Date());
+  const cls = t.dueOn < today ? 'overdue' : t.dueOn === today ? 'today' : '';
+  const label = t.dueOn === today ? 'today'
+    : new Date(`${t.dueOn}T12:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+  return `<span class="dueBadge ${cls}">${t.dueOn < today ? '⚠ ' : ''}${label}</span>`;
+}
+
+function renderSchool(tasks) {
+  const school = tasks.filter((t) => t.category === 'school')
+    .sort((a, b) => (a.dueOn ?? '0000').localeCompare(b.dueOn ?? '0000'));
+  const kids = state.members.filter((m) => m.role === 'child');
+  $('schoolGroups').innerHTML = kids.map((m) => {
+    const list = school.filter((t) => t.memberId === m.id);
+    return `<div class="taskGroup">
+      <h4><i style="background:${m.color}"></i>${esc(m.displayName)}</h4>
+      ${list.map((t) => `
+        <div class="checkRow">
+          <button class="tick" data-sc="${t.id}" aria-label="done"></button>
+          <div class="what">${esc(t.title)}${dueBadge(t)}${t.repeatFreq ? `<span class="byline">🔁 ${t.repeatFreq === 'daily' ? 'nightly' : t.repeatFreq}</span>` : ''}</div>
+          ${t.linkUrl ? `<button class="linkBtn" data-lk="${esc(t.linkUrl)}">🔗</button>` : ''}
+        </div>`).join('') || '<div class="allDone">All caught up ✓</div>'}
+    </div>`;
+  }).join('');
+  $('schoolGroups').querySelectorAll('button[data-sc]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      b.closest('.checkRow').style.opacity = '0.35';
+      await apiFetch(`/tasks/${b.dataset.sc}/complete`, { method: 'POST' });
+      loadLists();
+    }));
+  $('schoolGroups').querySelectorAll('button[data-lk]').forEach((b) =>
+    b.addEventListener('click', () => window.open(b.dataset.lk, '_blank')));
+
+  $('addSchoolForm').classList.toggle('hidden', !canAssign());
+  $('schoolPullRow').classList.toggle('hidden', !canAssign());
+  if (canAssign()) {
+    $('scMember').innerHTML = kids.map((m) =>
+      `<option value="${m.id}">${esc(m.displayName)}</option>`).join('');
+  }
+}
+
+async function loadSchoolResources() {
+  const { resources } = await apiFetch('/school/resources');
+  $('schoolRes').innerHTML = resources.map((r) => `
+    <a href="${esc(r.url)}" target="_blank" rel="noopener">📚 <span>${esc(r.label)}</span>
+      ${canAssign() ? `<button class="resDel" data-rd="${r.id}" title="remove">✕</button>` : ''}</a>`).join('');
+  $('schoolRes').querySelectorAll('button[data-rd]').forEach((b) =>
+    b.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      await apiFetch(`/school/resources/${b.dataset.rd}`, { method: 'DELETE' });
+      loadSchoolResources();
+    }));
+}
+
+$('addSchoolForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await apiFetch('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: $('scTitle').value.trim(),
+        memberId: $('scMember').value,
+        category: 'school',
+        dueDate: $('scDue').value || undefined,
+        repeatFreq: $('scRepeat').value || undefined,
+        linkUrl: $('scLink').value.trim() || undefined,
+      }),
+    });
+    e.target.reset();
+    toast('School task added ✓');
+    loadLists();
+  } catch (err) { toast(err.message); }
+});
+
+$('schoolPullBtn').addEventListener('click', async () => {
+  const b = $('schoolPullBtn');
+  b.disabled = true; b.textContent = 'Reading the planner…';
+  try {
+    const r = await apiFetch('/school/pull', { method: 'POST' });
+    toast(`Planner: ${r.createdTasks} new tasks (week of ${r.week ?? '?'}) ✓`);
+    loadLists();
+  } catch (err) { toast(err.message); }
+  finally { b.disabled = false; b.textContent = "📄 Pull Henry's planner now"; }
+});
+
 async function loadLists() {
   loadMeals();
+  loadSchoolResources();
   const [{ items }, { tasks }] = await Promise.all([
     apiFetch('/grocery'), apiFetch('/tasks'),
   ]);
+  renderSchool(tasks);
 
   $('groceryList').innerHTML = items.map((it) => `
     <div class="checkRow">
@@ -571,8 +665,9 @@ async function loadLists() {
     }));
 
   // tasks grouped per family member — everyone sees every list
+  // (school work lives in its own card above)
   const byMember = new Map(state.members.map((m) => [m.id, []]));
-  for (const t of tasks) byMember.get(t.memberId)?.push(t);
+  for (const t of tasks.filter((x) => x.category !== 'school')) byMember.get(t.memberId)?.push(t);
   $('taskGroups').innerHTML = state.members.map((m) => {
     const list = byMember.get(m.id) ?? [];
     return `<div class="taskGroup">
@@ -955,9 +1050,13 @@ async function loadTodayChores() {
   try {
     const { tasks } = await apiFetch('/tasks');
     const childIds = new Set(state.members.filter((m) => m.role === 'child').map((m) => m.id));
+    const today = localDateKey(new Date());
+    // main page: chores + school work that's due (or nightly) — future
+    // homework stays in the School card until its day comes
+    const current = tasks.filter((t) => t.category !== 'school' || !t.dueOn || t.dueOn <= today);
     const mine = state.me.role === 'child'
-      ? tasks.filter((t) => t.memberId === state.me.id)
-      : tasks.filter((t) => childIds.has(t.memberId));
+      ? current.filter((t) => t.memberId === state.me.id)
+      : current.filter((t) => childIds.has(t.memberId));
     const colorOf = Object.fromEntries(state.members.map((m) => [m.id, m.color]));
     const nameOf = Object.fromEntries(state.members.map((m) => [m.id, m.displayName]));
 
@@ -968,7 +1067,7 @@ async function loadTodayChores() {
           <button class="tick" data-ct="${t.id}" aria-label="mark done"></button>
           ${state.me.role !== 'child'
             ? `<span class="who"><i style="background:${colorOf[t.memberId]}"></i>${esc(nameOf[t.memberId] ?? '')}</span>` : ''}
-          <div class="what">${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}</div>
+          <div class="what">${t.category === 'school' ? '🎒 ' : ''}${esc(t.title)}${t.valueCents > 0 ? `<span class="valueBadge">${money(t.valueCents)}</span>` : ''}${t.category === 'school' ? dueBadge(t) : ''}</div>
         </div>`).join('')}
     </div>` : '';
 
