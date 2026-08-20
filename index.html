@@ -405,8 +405,13 @@
   .fgDetail { font-size:.88rem; color:var(--dim); margin-top:3px; line-height:1.5; }
   .fgDetail ul { margin:4px 0 4px 18px; }
   .fgWhen { font-size:.75rem; color:var(--dim); font-variant-numeric:tabular-nums; }
-  .fgVideo { position:relative; width:100%; aspect-ratio:16/9; margin-top:9px; border-radius:11px;
-             overflow:hidden; background:#000; border:1px solid var(--line); }
+  /* Cap the player so it doesn't fill a desktop window edge to edge. */
+  .fgVideo { position:relative; width:100%; max-width:520px; aspect-ratio:16/9; margin-top:9px;
+             border-radius:11px; overflow:hidden; background:#000; border:1px solid var(--line); }
+  @media (min-width:760px) {
+    #fgBody { max-width:820px; }
+    #fgNav  { max-width:820px; }
+  }
   .fgVideo iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
   .fgVideo button { position:absolute; inset:0; width:100%; height:100%; border:0; cursor:pointer;
                     background-size:cover; background-position:center; display:grid; place-items:center; }
