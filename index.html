@@ -381,6 +381,58 @@
   #saverExtras { position:absolute; left:50%; bottom:4.4vh; transform:translateX(-50%);
     display:flex; gap:3vmin; font-size:2.5vmin; color:rgba(212,175,55,.8); white-space:nowrap; }
   #saver.night #saverExtras { color:rgba(190,200,225,.65); }
+
+  /* ── 5th Grade tab ─────────────────────────────────────────── */
+  #fgNav { display:flex; gap:8px; overflow-x:auto; padding:10px 0 4px; scrollbar-width:none; }
+  #fgNav::-webkit-scrollbar { display:none; }
+  #fgNav button {
+    flex:none; border:1px solid var(--line); background:var(--panel); color:var(--text);
+    border-radius:999px; padding:7px 14px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  #fgNav button.active { background:var(--accent); border-color:var(--accent); color:var(--accent-dark); }
+  .fgCard { background:var(--panel); border-radius:14px; padding:14px; margin-top:12px;
+            border-left:4px solid var(--accent); }
+  .fgCard.plain { border-left:0; }
+  .fgHead { display:flex; justify-content:space-between; align-items:baseline; gap:10px;
+            padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .fgHead b { font-size:1rem; }
+  .fgHead.today b { color:var(--accent); }
+  .fgHead span { font-size:.78rem; color:var(--dim); }
+  .fgBlock { border-top:1px solid var(--line); padding:10px 0; }
+  .fgBlock:first-of-type { border-top:0; }
+  .fgSubj { font-weight:700; font-size:.9rem; color:var(--accent); }
+  .fgTitle { font-size:.95rem; margin-top:1px; }
+  .fgDetail { font-size:.88rem; color:var(--dim); margin-top:3px; line-height:1.5; }
+  .fgDetail ul { margin:4px 0 4px 18px; }
+  .fgWhen { font-size:.75rem; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .fgVideo { position:relative; width:100%; aspect-ratio:16/9; margin-top:9px; border-radius:11px;
+             overflow:hidden; background:#000; border:1px solid var(--line); }
+  .fgVideo iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .fgVideo button { position:absolute; inset:0; width:100%; height:100%; border:0; cursor:pointer;
+                    background-size:cover; background-position:center; display:grid; place-items:center; }
+  .fgVideo button::after { content:"▶"; font-size:24px; color:#fff; background:rgba(0,0,0,.62);
+                           width:60px; height:42px; border-radius:10px; display:grid; place-items:center; }
+  .fgItem { display:flex; gap:10px; align-items:flex-start; padding:11px;
+            border:1px solid var(--line); border-radius:12px; margin-top:8px; background:var(--panel); }
+  .fgItem .lead { font-size:1.15rem; flex:none; }
+  .fgItem .body { flex:1; min-width:0; }
+  .fgItem .t { font-weight:600; font-size:.95rem; }
+  .fgItem .m { font-size:.78rem; color:var(--dim); margin-top:2px; }
+  .fgItem.done .t { text-decoration:line-through; color:var(--dim); }
+  .fgItem input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); flex:none; margin-top:2px; }
+  .fgItem a { color:var(--accent); }
+  .fgSection { font-size:.72rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+               color:var(--dim); margin:18px 2px 6px; }
+  .fgWeekNav { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+  .fgWeekNav button { border:1px solid var(--line); background:var(--panel); color:var(--text);
+                      border-radius:9px; padding:7px 13px; cursor:pointer; font-size:.85rem; }
+  .fgWeekNav b { font-size:.92rem; }
+  .fgEmpty { color:var(--dim); font-size:.9rem; padding:18px; text-align:center;
+             border:1px dashed var(--line); border-radius:12px; margin-top:12px; }
+  .fgPill { display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em;
+            text-transform:uppercase; padding:2px 7px; border-radius:999px;
+            background:var(--panel2); color:var(--dim); }
+  .fgPill.due { background:rgba(229,72,77,.18); color:var(--red); }
 </style>
 </head>
 <body>
@@ -510,6 +562,11 @@
           <button id="gameNext" class="gold">Another one! 🎲</button>
         </div>
       </section>
+      <section id="view-fifth" class="hidden">
+        <div id="fgNav"></div>
+        <div id="fgBody"></div>
+      </section>
+
       <section id="view-sos" class="hidden">
         <div id="sosView">
           <div>

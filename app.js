@@ -120,6 +120,7 @@ function buildTabs() {
     { id: 'today', label: 'Today', icon: '📅' },
     { id: 'tasks', label: 'Tasks', icon: '✅' },
     { id: 'lists', label: 'Lists', icon: '📝' },
+    { id: 'fifth', label: '5th Grade', icon: '🎒' },
     { id: 'messages', label: 'Chat', icon: '💬' },
     { id: 'games', label: 'Games', icon: '🎲' },
     { id: 'sos', label: 'SOS', icon: '🆘' },
@@ -136,7 +137,7 @@ function buildTabs() {
 
 function switchTab(tab) {
   state.tab = tab;
-  for (const view of ['today', 'tasks', 'lists', 'messages', 'games', 'sos', 'admin']) {
+  for (const view of ['today', 'tasks', 'lists', 'fifth', 'messages', 'games', 'sos', 'admin']) {
     $(`view-${view}`).classList.toggle('hidden', view !== tab);
   }
   $('composer').classList.toggle('hidden', tab !== 'messages');
@@ -146,6 +147,7 @@ function switchTab(tab) {
   if (tab === 'today') { renderDayView(); loadTodayChores(); }
   if (tab === 'tasks') loadTasksTab();
   if (tab === 'lists') loadLists();
+  if (tab === 'fifth') loadFifth();
   if (tab === 'messages') loadMessages();
   if (tab === 'admin') loadAdmin();
 }
@@ -1788,3 +1790,359 @@ $('signinForm').addEventListener('submit', async (e) => {
 $('signout').addEventListener('click', showSignin);
 
 boot();
+
+// ================================================================
+// 5th Grade tab
+//
+// The class-wide material that used to live in the standalone McNeill
+// hub: Mrs. Wilder's day plans (with Mrs. Lehman's spiral-review video
+// embedded in each day), homework and due dates, the calendar, the link
+// library, and announcements.
+//
+// These tables are not exposed through the api edge function, so this
+// talks to PostgREST directly with the session token the app already
+// holds. RLS scopes every row to the family workspace.
+// ================================================================
+
+const REST = `${CFG.SUPABASE_URL}/rest/v1`;
+
+async function sbFetch(path, retried = false) {
+  const res = await fetch(`${REST}${path}`, {
+    headers: {
+      apikey: CFG.ANON_KEY,
+      Authorization: `Bearer ${session.access}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (res.status === 401 && !retried && (await refreshSession())) return sbFetch(path, true);
+  if (!res.ok) throw new Error(`5th grade: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function sbWrite(path, method, body) {
+  const res = await fetch(`${REST}${path}`, {
+    method,
+    headers: {
+      apikey: CFG.ANON_KEY,
+      Authorization: `Bearer ${session.access}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+const fg = {
+  view: 'today',
+  loaded: false,
+  weekStart: null,
+  classes: [], assignments: [], events: [], notes: [], links: [],
+  done: new Set(),
+  plans: new Map(),      // iso date -> plan row (with .blocks)
+  weeksLoaded: new Set(),
+};
+
+// ── dates, in the school's timezone-free local sense ─────────────
+
+// School days are pinned to the school's timezone, so a plan can't shift a
+// day when someone opens this from another time zone.
+const FG_TZ = 'America/Chicago';
+const fgIso = (d) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: FG_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date(d));
+const fgToday = () => fgIso(new Date());
+const fgParse = (iso) => new Date(`${iso}T12:00:00`);
+const fgAdd = (d, n) => { const c = new Date(d); c.setDate(c.getDate() + n); return c; };
+function fgMonday(d) {
+  const c = fgParse(fgIso(d));          // normalise to the school's calendar day
+  c.setDate(c.getDate() - ((c.getDay() + 6) % 7));
+  c.setHours(12, 0, 0, 0);              // noon: immune to DST rollover
+  return c;
+}
+const fgDow = (iso) => fgParse(iso).toLocaleDateString('en-US', { timeZone: FG_TZ, weekday: 'long' });
+const fgShort = (d) => d.toLocaleDateString('en-US', {
+  timeZone: FG_TZ, weekday: 'short', month: 'short', day: 'numeric' });
+const fgClock = (t) => {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+};
+function fgRelDay(iso) {
+  if (iso === fgToday()) return 'Today';
+  if (iso === fgIso(fgAdd(new Date(), 1))) return 'Tomorrow';
+  if (iso === fgIso(fgAdd(new Date(), -1))) return 'Yesterday';
+  return fgDow(iso);
+}
+
+// ── tiny markdown + YouTube, same subset the teacher writes in ───
+
+function fgMd(src) {
+  if (!src) return '';
+  const lines = esc(src).split(/\r?\n/);
+  let out = '', list = false;
+  const inline = (x) => x
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  for (const raw of lines) {
+    const line = raw.trim();
+    const b = line.match(/^[-*•]\s+(.*)$/);
+    if (b) { if (!list) { out += '<ul>'; list = true; } out += `<li>${inline(b[1])}</li>`; }
+    else { if (list) { out += '</ul>'; list = false; } if (line) out += `<p>${inline(line)}</p>`; }
+  }
+  if (list) out += '</ul>';
+  return out;
+}
+
+const fgYt = (url) => {
+  const m = String(url ?? '').match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : '';
+};
+
+/** Click-to-load: nothing is requested from YouTube until someone presses play. */
+function fgVideo(url) {
+  const id = fgYt(url);
+  if (!id) return url ? `<p><a href="${esc(url)}" target="_blank" rel="noopener">▶ Watch</a></p>` : '';
+  return `<div class="fgVideo" data-yt="${id}">
+    <button aria-label="Play video" style="background-image:url('https://i.ytimg.com/vi/${id}/hqdefault.jpg')"></button>
+  </div>`;
+}
+
+// ── loading ─────────────────────────────────────────────────────
+
+async function loadFifth() {
+  if (!fg.loaded) {
+    $('fgBody').innerHTML = '<div class="fgEmpty">Loading…</div>';
+    try {
+      const [classes, assignments, events, notes, links, done] = await Promise.all([
+        sbFetch('/school_classes?select=*&archived=is.false&order=sort'),
+        sbFetch('/school_assignments?select=*&order=due_date.nullslast'),
+        sbFetch(`/school_events?select=*&starts_at=gte.${new Date(Date.now() - 864e5).toISOString()}&order=starts_at`),
+        sbFetch('/school_notes?select=*&order=pinned.desc,publish_at.desc'),
+        sbFetch('/school_links?select=*&archived=is.false&order=sort'),
+        sbFetch(`/school_assignment_done?select=assignment_id&member_id=eq.${state.me.id}`),
+      ]);
+      Object.assign(fg, { classes, assignments, events, notes, links, loaded: true });
+      fg.done = new Set(done.map((d) => d.assignment_id));
+    } catch (err) {
+      $('fgBody').innerHTML = `<div class="fgEmpty">Couldn't load the 5th grade section.<br>${esc(err.message)}</div>`;
+      return;
+    }
+  }
+  fg.weekStart ??= fgMonday(new Date());
+  await fgLoadWeek(fg.weekStart);
+  renderFifth();
+}
+
+/** Day plans are fetched a week at a time so paging back a month is cheap. */
+async function fgLoadWeek(monday) {
+  const key = fgIso(monday);
+  if (fg.weeksLoaded.has(key)) return;
+  const to = fgIso(fgAdd(monday, 6));
+  const rows = await sbFetch(
+    `/school_day_plans?select=*,school_plan_blocks(*)&published=is.true` +
+    `&plan_date=gte.${key}&plan_date=lte.${to}&order=plan_date`);
+  for (const p of rows) {
+    p.blocks = (p.school_plan_blocks ?? []).sort((a, b) => a.sort - b.sort);
+    fg.plans.set(p.plan_date, p);
+  }
+  fg.weeksLoaded.add(key);
+}
+
+// ── rendering ───────────────────────────────────────────────────
+
+function renderFifth() {
+  const views = [['today', 'Today'], ['week', 'Week'], ['homework', 'Homework'],
+                 ['links', 'Links'], ['news', 'News']];
+  $('fgNav').innerHTML = views.map(([id, label]) =>
+    `<button data-fg="${id}" class="${fg.view === id ? 'active' : ''}">${label}</button>`).join('');
+
+  const body = $('fgBody');
+  if (fg.view === 'today') body.innerHTML = fgToday_();
+  if (fg.view === 'week') body.innerHTML = fgWeek_();
+  if (fg.view === 'homework') body.innerHTML = fgHomework_();
+  if (fg.view === 'links') body.innerHTML = fgLinks_();
+  if (fg.view === 'news') body.innerHTML = fgNews_();
+}
+
+function fgDayCard(iso) {
+  const plan = fg.plans.get(iso);
+  const due = fg.assignments.filter((a) => a.due_date === iso);
+  const isToday = iso === fgToday();
+  const head = `<div class="fgHead ${isToday ? 'today' : ''}">
+      <b>${esc(fgRelDay(iso))}</b><span>${esc(fgShort(fgParse(iso)))}</span></div>`;
+
+  if (!plan && !due.length) {
+    return `<div class="fgCard">${head}<p class="fgDetail" style="margin-top:8px">Nothing posted for this day.</p></div>`;
+  }
+
+  const blocks = (plan?.blocks ?? []).map((b) => `
+    <div class="fgBlock">
+      ${b.start_time ? `<div class="fgWhen">${esc(fgClock(b.start_time))}${b.end_time ? ` – ${esc(fgClock(b.end_time))}` : ''}</div>` : ''}
+      <div class="fgSubj">${esc(b.subject)}</div>
+      ${b.title ? `<div class="fgTitle">${esc(b.title)}</div>` : ''}
+      ${b.detail ? `<div class="fgDetail">${fgMd(b.detail)}</div>` : ''}
+      ${b.link_url ? `<p class="fgDetail"><a href="${esc(b.link_url)}" target="_blank" rel="noopener">🔗 Open link</a></p>` : ''}
+      ${b.video_url ? fgVideo(b.video_url) : ''}
+    </div>`).join('');
+
+  return `<div class="fgCard">
+    ${head}
+    ${plan?.headline ? `<p style="font-weight:700;margin:8px 0 2px">${esc(plan.headline)}</p>` : ''}
+    ${blocks}
+    ${due.length ? `<div class="fgSection">Due today</div>${due.map(fgAssignRow).join('')}` : ''}
+  </div>`;
+}
+
+function fgToday_() {
+  const iso = fgToday();
+  const soon = fg.events.slice(0, 4);
+  const upcoming = fg.assignments
+    .filter((a) => a.nightly || (a.due_date && a.due_date >= iso))
+    .slice(0, 5);
+  const pinned = fg.notes.filter((n) => n.pinned || n.urgent).slice(0, 2);
+
+  return `
+    ${pinned.map(fgNoteCard).join('')}
+    <div class="fgSection">Today's plan</div>
+    ${fgDayCard(iso)}
+    <div class="fgSection">Homework</div>
+    ${upcoming.length ? upcoming.map(fgAssignRow).join('') : '<div class="fgEmpty">Nothing due right now. 🎉</div>'}
+    <div class="fgSection">Coming up</div>
+    ${soon.length ? soon.map(fgEventRow).join('') : '<div class="fgEmpty">No events posted.</div>'}`;
+}
+
+function fgWeek_() {
+  const start = fg.weekStart;
+  const days = [...Array(5)].map((_, i) => fgIso(fgAdd(start, i)));
+  return `
+    <div class="fgWeekNav">
+      <button data-fgweek="-1">←</button>
+      <b>${esc(fgShort(start))} – ${esc(fgShort(fgAdd(start, 4)))}</b>
+      <button data-fgweek="1">→</button>
+    </div>
+    <div style="margin-top:6px"><button class="fgPill" data-fgweek="0"
+      style="border:0;cursor:pointer;padding:5px 10px">This week</button></div>
+    ${days.map(fgDayCard).join('')}`;
+}
+
+function fgAssignRow(a) {
+  const done = fg.done.has(a.id);
+  const overdue = a.due_date && a.due_date < fgToday() && !done;
+  const when = a.nightly ? 'Every night'
+    : a.due_date ? `${overdue ? 'Overdue — ' : 'Due '}${esc(fgRelDay(a.due_date))}`
+    : 'No due date';
+  return `<div class="fgItem ${done ? 'done' : ''}">
+    <input type="checkbox" data-fgdone="${a.id}" ${done ? 'checked' : ''}
+           aria-label="Mark ${esc(a.title)} done">
+    <div class="body">
+      <div class="t">${esc(a.title)}</div>
+      <div class="m">${a.subject ? `${esc(a.subject)} · ` : ''}<span class="${overdue ? 'fgPill due' : ''}">${when}</span></div>
+      ${a.description ? `<div class="fgDetail">${fgMd(a.description)}</div>` : ''}
+      ${a.link_url ? `<div class="m"><a href="${esc(a.link_url)}" target="_blank" rel="noopener">🔗 Open</a></div>` : ''}
+      ${a.video_url ? fgVideo(a.video_url) : ''}
+    </div>
+  </div>`;
+}
+
+function fgHomework_() {
+  const today = fgToday();
+  const nightly = fg.assignments.filter((a) => a.nightly);
+  const dated = fg.assignments.filter((a) => !a.nightly && (!a.due_date || a.due_date >= today));
+  const past = fg.assignments.filter((a) => !a.nightly && a.due_date && a.due_date < today).slice(0, 8);
+  return `
+    <p class="fgDetail" style="margin-top:10px">Ticks are private to you — they aren't sent to anyone.</p>
+    ${dated.length ? `<div class="fgSection">Coming due</div>${dated.map(fgAssignRow).join('')}` : ''}
+    ${nightly.length ? `<div class="fgSection">Every night</div>${nightly.map(fgAssignRow).join('')}` : ''}
+    ${!dated.length && !nightly.length ? '<div class="fgEmpty">Nothing assigned right now. 🎉</div>' : ''}
+    ${past.length ? `<div class="fgSection">Recently past due</div>${past.map(fgAssignRow).join('')}` : ''}`;
+}
+
+function fgEventRow(e) {
+  const d = new Date(e.starts_at);
+  const icon = { trip: '🚌', test: '📝', due: '📌', holiday: '🎉', spirit: '🎽', meeting: '🤝' }[e.category] ?? '📅';
+  return `<div class="fgItem">
+    <span class="lead">${icon}</span>
+    <div class="body">
+      <div class="t">${esc(e.title)}</div>
+      <div class="m">${esc(fgShort(d))}${e.all_day ? ' · all day'
+        : ` · ${d.toLocaleTimeString('en-US', { timeZone: FG_TZ, hour: 'numeric', minute: '2-digit' })}`}${
+        e.location ? ` · ${esc(e.location)}` : ''}</div>
+      ${e.description ? `<div class="fgDetail">${fgMd(e.description)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function fgLinks_() {
+  if (!fg.links.length) return '<div class="fgEmpty">No links yet.</div>';
+  const bySubject = new Map();
+  for (const l of fg.links) {
+    const k = l.subject || 'General';
+    if (!bySubject.has(k)) bySubject.set(k, []);
+    bySubject.get(k).push(l);
+  }
+  return [...bySubject].map(([subject, rows]) => `
+    <div class="fgSection">${esc(subject)}</div>
+    ${rows.map((l) => `<a class="fgItem" href="${esc(l.url)}" target="_blank" rel="noopener"
+        style="text-decoration:none;color:inherit">
+        <span class="lead">${l.kind === 'video' ? '🎬' : '🔗'}</span>
+        <div class="body"><div class="t">${esc(l.title)}</div>
+        ${l.description ? `<div class="m">${esc(l.description)}</div>` : ''}</div>
+      </a>`).join('')}`).join('');
+}
+
+const fgNoteCard = (n) => `<div class="fgCard" style="border-left-color:${n.urgent ? 'var(--red)' : 'var(--accent)'}">
+    <div class="fgHead"><b>${esc(n.title)}</b>
+      <span>${new Date(n.publish_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></div>
+    <div class="fgDetail" style="margin-top:8px">${fgMd(n.body)}</div>
+  </div>`;
+
+const fgNews_ = () => fg.notes.length
+  ? fg.notes.map(fgNoteCard).join('')
+  : '<div class="fgEmpty">No announcements yet.</div>';
+
+// ── interactions ────────────────────────────────────────────────
+
+document.addEventListener('click', async (ev) => {
+  const play = ev.target.closest('.fgVideo button');
+  if (play) {
+    const box = play.closest('.fgVideo');
+    box.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(box.dataset.yt)}?autoplay=1&rel=0&modestbranding=1"
+      title="Video" allow="accelerometer; autoplay; encrypted-media; picture-in-picture"
+      referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+    return;
+  }
+
+  const nav = ev.target.closest('[data-fg]');
+  if (nav) { fg.view = nav.dataset.fg; renderFifth(); return; }
+
+  const wk = ev.target.closest('[data-fgweek]');
+  if (wk) {
+    const step = Number(wk.dataset.fgweek);
+    fg.weekStart = step === 0 ? fgMonday(new Date()) : fgAdd(fg.weekStart, step * 7);
+    await fgLoadWeek(fg.weekStart);
+    renderFifth();
+  }
+});
+
+document.addEventListener('change', async (ev) => {
+  const box = ev.target.closest('[data-fgdone]');
+  if (!box) return;
+  const id = box.dataset.fgdone;
+  const done = box.checked;
+  try {
+    if (done) {
+      await sbWrite('/school_assignment_done?on_conflict=assignment_id,member_id', 'POST',
+        { assignment_id: id, member_id: state.me.id });
+      fg.done.add(id);
+    } else {
+      await sbWrite(`/school_assignment_done?assignment_id=eq.${id}&member_id=eq.${state.me.id}`, 'DELETE');
+      fg.done.delete(id);
+    }
+    renderFifth();
+  } catch {
+    box.checked = !done;
+    toast('Could not save that.');
+  }
+});
